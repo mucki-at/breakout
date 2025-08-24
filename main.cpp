@@ -2,48 +2,15 @@
 //!@copyright Copyright (c) 2025
 //! please see LICENSE file in root folder for licensing terms.
 
+#include "common.h"
+#include "vkutils.h"
 #include "game.h"
-#include <iostream>
-#include <vector>
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wpragma-pack"
-#include <SDL.h>
-#include <SDL_vulkan.h>
-#pragma clang diagnostic pop
-#include <vulkan/vulkan.hpp>
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
 
 static inline constexpr size_t DefaultWidth  = 800;
 static inline constexpr size_t DefaultHeight = 600;
-
-struct SDLChecker
-{
-    SDLChecker& operator=(int value)
-    {
-        if (value!=0)
-        {
-            std::cerr << "SDL check failed: " << SDL_GetError() << std::endl;
-            exit(-1);
-        }
-        return *this;
-    }
-};
-
-struct VKChecker
-{
-    VKChecker& operator=(VkResult result)
-    {
-        if (result!=VK_SUCCESS)
-        {
-            std::cerr << "VK check failed: " << static_cast<int>(result) << std::endl;
-            exit(-1);
-        }
-        return *this;
-    }
-};
-
-#define SDL_CHECKED SDLChecker() = 
-#define VK_CHECKED VKChecker() = 
 
 //!@brief
 //!
@@ -51,279 +18,282 @@ struct VKChecker
 //!@param argv
 //!@return int
 int main(int argc, char* argv[])
+try
 {
-    auto breakout = Game(DefaultWidth, DefaultHeight);
+    // Step 1: initialize graphics
+    // Step 1.1: initialize glfw
+    glfwInit();
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+    auto window = glfwCreateWindow(DefaultWidth, DefaultHeight, "Break Out Volcano !!", nullptr, nullptr);
 
-    // Step 1: initialize Vulkan
-    SDL_CHECKED SDL_Init(SDL_INIT_VIDEO);
-    SDL_CHECKED SDL_Vulkan_LoadLibrary(nullptr);
+    // Step 1.2: initialize Vulkan
+    vk::raii::Context context; //!< overall context for Vulkan RAII wrapper. This handles loader and dispatcher logic
 
-    SDL_Window* window = SDL_CreateWindow(
-        "Break Out Volcano!!",
-        SDL_WINDOWPOS_UNDEFINED,
-        SDL_WINDOWPOS_UNDEFINED,
-        DefaultWidth,
-        DefaultHeight,
-        SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN);
+    //! Some information about our application
+    auto appInfo = vk::ApplicationInfo {
+        .pApplicationName = "Break Out Volcano",
+        .applicationVersion = vk::makeVersion(1, 0, 0),
+        .apiVersion = vk::ApiVersion14
+    };
 
+    uint32_t glfwExtensionCount = 0;
+    auto glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-    VkApplicationInfo appInfo{};
-    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = "Hello Triangle";
-    appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.pEngineName = "No Engine";
-    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_0;
+    vk::InstanceCreateFlags instanceCreateFlags={};
+    vector<const char*> requiredExtensions;
+    requiredExtensions.assign(glfwExtensions, glfwExtensions+glfwExtensionCount);
 
-    std::vector<const char*> requiredExtensions;
-    unsigned int extensionCount=0;
-    SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, nullptr);
+#ifdef __APPLE__
+    requiredExtensions.push_back(vk::KHRPortabilityEnumerationExtensionName);       // required for MAC OS
+    instanceCreateFlags |= vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR;
 
-    requiredExtensions.resize(extensionCount);
-    SDL_Vulkan_GetInstanceExtensions(window, &extensionCount, requiredExtensions.data());
-    
-    requiredExtensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
-    
-    VkInstanceCreateInfo instInfo{};
-    instInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    instInfo.pApplicationInfo = &appInfo;
-    instInfo.enabledExtensionCount = requiredExtensions.size();
-    instInfo.ppEnabledExtensionNames = requiredExtensions.data();
-    instInfo.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+    requiredExtensions.push_back(vk::KHRGetPhysicalDeviceProperties2ExtensionName); // required for MAC OS as dependency for portability subset later on
+#endif
 
-    VkInstance vkInst=0;
-    VK_CHECKED vkCreateInstance(&instInfo, nullptr, &vkInst);
+    //! Create a vulkan instance (global object to interact with vulkan api)
+    auto instance = vk::raii::Instance(
+        context,
+        vk::InstanceCreateInfo {
+            .flags=instanceCreateFlags,
+            .pApplicationInfo = &appInfo
+        }.setPEnabledExtensionNames(requiredExtensions)
+    );
 
-    uint32_t physicalDeviceCount;
-    vkEnumeratePhysicalDevices(vkInst, &physicalDeviceCount, nullptr);
-    std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
-    vkEnumeratePhysicalDevices(vkInst, &physicalDeviceCount, physicalDevices.data());
-    VkPhysicalDevice physicalDevice = physicalDevices[0];
-
-    uint32_t queueFamilyCount;
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
-    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies.data());
-
-    VkSurfaceKHR surface;
-    SDL_Vulkan_CreateSurface(window, vkInst, &surface);
-
-    uint32_t graphicsQueueIndex = UINT32_MAX;
-    uint32_t presentQueueIndex  = UINT32_MAX;
-    VkBool32 support;
-    uint32_t i = 0;
-    for (VkQueueFamilyProperties queueFamily: queueFamilies)
-    {
-        if (graphicsQueueIndex == UINT32_MAX && queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) graphicsQueueIndex = i;
-        if (presentQueueIndex == UINT32_MAX)
-        {
-            vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &support);
-            if (support) presentQueueIndex = i;
-        }
-        ++i;
+    //! Create a vulkan surface to display stuff on screen
+    VkSurfaceKHR surfaceHandle;
+    if (glfwCreateWindowSurface(*instance, window, nullptr, &surfaceHandle) != 0) {
+        throw std::runtime_error("failed to create window surface!");
     }
+    vk::raii::SurfaceKHR surface(instance, surfaceHandle); // make RAII type from SDL created
 
-    float                   queuePriority = 1.0f;
-    VkDeviceQueueCreateInfo queueInfo     = {
-        VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, // sType
-        nullptr,                                    // pNext
-        0,                                          // flags
-        graphicsQueueIndex,                         // graphicsQueueIndex
-        1,                                          // queueCount
-        &queuePriority,                             // pQueuePriorities
+    //! Find the proper physical device
+    vector<const char*> deviceExtensions = {
+#ifdef __APPLE__
+        vk::KHRPortabilitySubsetExtensionName,
+#endif
+        vk::KHRSwapchainExtensionName,
+        vk::KHRSpirv14ExtensionName,
+        vk::KHRSynchronization2ExtensionName,
+        vk::KHRCreateRenderpass2ExtensionName
     };
 
-    VkPhysicalDeviceFeatures deviceFeatures         = {};
-    const char*              deviceExtensionNames[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-    VkDeviceCreateInfo       createInfo             = {
-        VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, // sType
-        nullptr,                              // pNext
-        0,                                    // flags
-        1,                                    // queueCreateInfoCount
-        &queueInfo,                           // pQueueCreateInfos
-        0,                                    // enabledLayerCount
-        nullptr,                              // ppEnabledLayerNames
-        1,                                    // enabledExtensionCount
-        deviceExtensionNames,                 // ppEnabledExtensionNames
-        &deviceFeatures,                      // pEnabledFeatures
+    auto [physicalDevice, graphicsQueueIndex, presentQueueIndex] = findAppropriateDeviceAndQueueFamily(
+        instance,
+        {
+            .apiVersion = vk::ApiVersion13,
+            .deviceExtensions = deviceExtensions,
+            .surface = &surface
+        }
+    );
+
+    //! Create a logical device
+    float prio = 1.0f;
+    auto queueInfo = vk::DeviceQueueCreateInfo
+    {
+        .queueFamilyIndex = graphicsQueueIndex
+    }.setQueuePriorities(prio);
+    // TODO: why do we not need a second queueInfo for presentQueue if the index is different???
+
+    vk::StructureChain<
+        vk::PhysicalDeviceFeatures2,
+        vk::PhysicalDeviceVulkan11Features,
+        vk::PhysicalDeviceVulkan13Features,
+        vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
+    > featureChain =
+    {
+        {},                               // vk::PhysicalDeviceFeatures2 (empty for now)
+        {.shaderDrawParameters = true },  // Enable shader draw parameters
+        {
+            .dynamicRendering = true,      // Enable dynamic rendering from Vulkan 1.3
+            .synchronization2 = true        // must enable this to use sync primitives for dynamic rendering
+        },
+        {.extendedDynamicState = true }   // Enable extended dynamic state from the extension
+    }
+    ;
+    auto createInfo = vk::DeviceCreateInfo
+    {
+        .pNext = &featureChain.get<vk::PhysicalDeviceFeatures2>(),
     };
-    VkDevice device;
-    vkCreateDevice(physicalDevice, &createInfo, nullptr, &device);
+    createInfo.setQueueCreateInfos(queueInfo);
+    createInfo.setPEnabledExtensionNames(deviceExtensions);
 
-    VkQueue graphicsQueue;
-    vkGetDeviceQueue(device, graphicsQueueIndex, 0, &graphicsQueue);
+    auto device = vk::raii::Device(physicalDevice, createInfo);
 
-    VkQueue presentQueue;
-    vkGetDeviceQueue(device, presentQueueIndex, 0, &presentQueue);
+    //! Create graphics and present queues
+    auto graphicsQueue = vk::raii::Queue(device, graphicsQueueIndex, 0);
+    auto presentQueue = vk::raii::Queue(device, presentQueueIndex, 0);
 
-    SDL_Log("Initialized with errors: %s", SDL_GetError());
+    //! create a swap chain
+    auto swapper = SwapChainManager(
+        device,
+        graphicsQueue,
+        presentQueue,
+        graphicsQueueIndex,
+        2
+    );
+    swapper.reset(physicalDevice, surface);
+
+    //! create a pipeline
+    auto shaderModule=loadShaderModule(device, "shaders/slang.spv");
+    vk::PipelineShaderStageCreateInfo shaderStages[]=
+    {
+        vk::PipelineShaderStageCreateInfo
+        {
+            .stage = vk::ShaderStageFlagBits::eVertex,
+            .module = shaderModule,
+            .pName = "vertMain"
+        },
+        vk::PipelineShaderStageCreateInfo
+        {
+            .stage = vk::ShaderStageFlagBits::eFragment,
+            .module = shaderModule,
+            .pName = "fragMain"
+        }
+    };
+
+    auto dynamicStates={vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+    auto dynamicState = vk::PipelineDynamicStateCreateInfo{}.setDynamicStates(dynamicStates);
+    
+    auto vertexInputInfo = vk::PipelineVertexInputStateCreateInfo{};
+    auto inputAssembly = vk::PipelineInputAssemblyStateCreateInfo
+    {
+        .topology = vk::PrimitiveTopology::eTriangleList
+    };
+    auto viewport = vk::Viewport
+    {
+        .x=0.0f,
+        .y=0.0f,
+        .width=static_cast<float>(swapper.getExtent().width),
+        .height=static_cast<float>(swapper.getExtent().height),
+        .minDepth=0.0f,
+        .maxDepth=1.0f
+    };
+    auto scissorRect=vk::Rect2D{ vk::Offset2D{ 0, 0 }, swapper.getExtent() };
+    auto viewportState = vk::PipelineViewportStateCreateInfo{}
+        .setViewports(viewport)
+        .setScissors(scissorRect);
+    auto rasterizer = vk::PipelineRasterizationStateCreateInfo
+    {
+        .cullMode = {}, //vk::CullModeFlagBits::eBack,
+        .lineWidth = 1.0f
+    };
+    auto multisampling=vk::PipelineMultisampleStateCreateInfo{};
+    auto colorBlendAttachment=vk::PipelineColorBlendAttachmentState
+    {
+        .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB
+    };
+    auto colorBlending=vk::PipelineColorBlendStateCreateInfo{}.setAttachments(colorBlendAttachment);
+    
+    auto pipelineLayoutInfo =vk::PipelineLayoutCreateInfo{};
+    auto pipelineLayout = vk::raii::PipelineLayout( device, pipelineLayoutInfo );
+
+    auto pipelineRenderingCreateInfo = vk::PipelineRenderingCreateInfo
+    {
+        .colorAttachmentCount = 1,
+        .pColorAttachmentFormats = &swapper.getFormat()
+    };
+
+    auto pipelineInfo = vk::GraphicsPipelineCreateInfo
+    {
+        .pNext = &pipelineRenderingCreateInfo,
+        .stageCount = 2,
+        .pStages = shaderStages,
+        .pVertexInputState = &vertexInputInfo,
+        .pInputAssemblyState = &inputAssembly,
+        .pViewportState = &viewportState,
+        .pRasterizationState = &rasterizer,
+        .pMultisampleState = &multisampling,
+        .pColorBlendState = &colorBlending,
+        .pDynamicState = &dynamicState,
+        .layout = pipelineLayout
+    };
+
+    auto graphicsPipeline = vk::raii::Pipeline(device, nullptr, pipelineInfo);
 
     // Step 2: initialize Game
+    auto breakout = Game(DefaultWidth, DefaultHeight);
     breakout.init();
 
     // Step 3: Run game loop
     float deltaTime = 0.0f;
     float lastFrame = 0.0f;
 
-    bool running = true;
-    while (running)
+    while (!glfwWindowShouldClose(window))
     {
-        // Step 3.1: update time and get input
-        float currentFrame = SDL_GetTicks64();
-        deltaTime          = currentFrame - lastFrame;
-        lastFrame          = currentFrame;
+        // Step 3.1: wait until we are ready for next frame (present has finished)
+        if (swapper.waitForNextFrame())
+        {
+            // we need a reset
+            swapper.reset(physicalDevice, surface);
+            continue;
+        }
 
-        SDL_Event windowEvent;
-        while (SDL_PollEvent(&windowEvent))
-            if (windowEvent.type == SDL_QUIT)
-            {
-                running = false;
-                break;
-            }
-
+        glfwPollEvents();
 
         // Step 3.2: process input and update game state
-        breakout.processInput(deltaTime);
-        breakout.update(deltaTime);
+        breakout.processInput(0);
+        breakout.update(0);
 
         // Step 3.3: render frame
-        // glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        // glClear(GL_COLOR_BUFFER_BIT);
-        breakout.render();
+        auto& commandBuffer = swapper.beginFrame();
+        vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.25f, 1.0f);
+        auto attachmentInfo = vk::RenderingAttachmentInfo{
+            .imageView = swapper.getCurrentView(),
+            .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+            .loadOp = vk::AttachmentLoadOp::eClear,
+            .storeOp = vk::AttachmentStoreOp::eStore,
+            .clearValue = clearColor
+        };
 
-        // glfwSwapBuffers(window);
+        auto renderingInfo = vk::RenderingInfo{
+            .renderArea = { .offset = { 0, 0 }, .extent = swapper.getExtent() },
+            .layerCount = 1,
+            .colorAttachmentCount = 1,
+            .pColorAttachments = &attachmentInfo
+        };
+        commandBuffer.beginRendering(renderingInfo);
+
+        //breakout.render();
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
+        commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapper.getExtent().width), static_cast<float>(swapper.getExtent().height), 0.0f, 1.0f));
+        commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapper.getExtent()));
+        commandBuffer.draw(3, 1, 0, 0);
+        
+        commandBuffer.endRendering();
+
+        if (swapper.endFrame())
+        {
+            // we need a reset
+            swapper.reset(physicalDevice, surface);
+        }
     }
+
+    swapper.cleanup();
 
     // delete all resources as loaded using the resource manager
     // ---------------------------------------------------------
     // ResourceManager::Clear();
 
-    vkDestroyDevice(device, nullptr);
-    vkDestroyInstance(vkInst, nullptr);
-    SDL_DestroyWindow(window);
-    SDL_Vulkan_UnloadLibrary();
-    SDL_Quit();
-
-    SDL_Log("Cleaned up with errors: %s", SDL_GetError());
-
-    return 0;
-}
-
-#if 0
-#    include "game.h"
-#    include "resource_manager.h"
-
-#    include <iostream>
-
-// GLFW function declarations
-void framebuffer_size_callback(GLFWwindow* window, int width, int height);
-void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
-
-// The Width of the screen
-const unsigned int SCREEN_WIDTH = 800;
-// The height of the screen
-const unsigned int SCREEN_HEIGHT = 600;
-
-Game Breakout(SCREEN_WIDTH, SCREEN_HEIGHT);
-
-//!@brief 
-//!
-//!@param argc 
-//!@param argv 
-//!@return int 
-int main(int argc, char *argv[])
-{
-    glfwInit();
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-#    ifdef __APPLE__
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-#    endif
-    glfwWindowHint(GLFW_RESIZABLE, false);
-
-    GLFWwindow* window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Breakout", nullptr, nullptr);
-    glfwMakeContextCurrent(window);
-
-    // glad: load all OpenGL function pointers
-    // ---------------------------------------
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-    {
-        std::cout << "Failed to initialize GLAD" << std::endl;
-        return -1;
-    }
-
-    glfwSetKeyCallback(window, key_callback);
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-
-    // OpenGL configuration
-    // --------------------
-    glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    // initialize game
-    // ---------------
-    Breakout.Init();
-
-    // deltaTime variables
-    // -------------------
-    float deltaTime = 0.0f;
-    float lastFrame = 0.0f;
-
-    while (!glfwWindowShouldClose(window))
-    {
-        // calculate delta time
-        // --------------------
-        float currentFrame = glfwGetTime();
-        deltaTime = currentFrame - lastFrame;
-        lastFrame = currentFrame;
-        glfwPollEvents();
-
-        // manage user input
-        // -----------------
-        Breakout.ProcessInput(deltaTime);
-
-        // update game state
-        // -----------------
-        Breakout.Update(deltaTime);
-
-        // render
-        // ------
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-        Breakout.Render();
-
-        glfwSwapBuffers(window);
-    }
-
-    // delete all resources as loaded using the resource manager
-    // ---------------------------------------------------------
-    ResourceManager::Clear();
-
+    // Step 4: cleanup glfw (vulkan uses RAII and doesn't need cleanup code)
+    glfwDestroyWindow(window);
     glfwTerminate();
+
     return 0;
 }
-
-void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode)
+catch (vk::SystemError& e)
 {
-    // when a user presses the escape key, we set the WindowShouldClose property to true, closing the application
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, true);
-    if (key >= 0 && key < 1024)
-    {
-        if (action == GLFW_PRESS)
-            Breakout.Keys[key] = true;
-        else if (action == GLFW_RELEASE)
-            Breakout.Keys[key] = false;
-    }
+    cerr << "Vulkan error: " << e.what() << std::endl;
+    return 1;
+}
+catch (runtime_error& e)
+{
+    cerr << "runtime error: " << e.what() << std::endl;
+    return 2;
+}
+catch (...)
+{
+    cerr << "unknown error" << std::endl;
+    return -1;
 }
 
-void framebuffer_size_callback(GLFWwindow* window, int width, int height)
-{
-    // make sure the viewport matches the new window dimensions; note that width and 
-    // height will be significantly larger than specified on retina displays.
-    glViewport(0, 0, width, height);
-}
-
-#endif
