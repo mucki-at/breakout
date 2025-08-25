@@ -10,6 +10,9 @@
 class Game
 {
 public:
+    static constexpr size_t KeyCount = 1024;
+
+public:
     enum State
     {
         Active,
@@ -30,9 +33,15 @@ public:
     void update(float dt);
     void render();
 
+    inline void setKey(size_t key, bool pressed)
+    {
+        if (key < KeyCount)
+            keys[key] = pressed;
+    }
+
 private:
     // game state
     State  state;
-    bool   keys[1024];
+    bool   keys[KeyCount];
     size_t width, height;
 };

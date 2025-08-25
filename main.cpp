@@ -12,6 +12,19 @@
 static inline constexpr size_t DefaultWidth  = 800;
 static inline constexpr size_t DefaultHeight = 600;
 
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, true);
+
+    if (key >= 0)
+    {
+        Game* game=static_cast<Game*>(glfwGetWindowUserPointer(window));
+        if (game) game->setKey(key, action != GLFW_RELEASE);
+    }
+}
+
+
 //!@brief
 //!
 //!@param argc
@@ -215,6 +228,9 @@ try
     auto breakout = Game(DefaultWidth, DefaultHeight);
     breakout.init();
 
+    glfwSetKeyCallback(window, key_callback);
+    glfwSetWindowUserPointer(window, &breakout);
+
     // Step 3: Run game loop
     float deltaTime = 0.0f;
     float lastFrame = 0.0f;
@@ -229,11 +245,14 @@ try
             continue;
         }
 
+        // Step 3.2: process input and update game state
+        float currentFrame = glfwGetTime();
+        deltaTime = currentFrame - lastFrame;
+        lastFrame = currentFrame;
         glfwPollEvents();
 
-        // Step 3.2: process input and update game state
-        breakout.processInput(0);
-        breakout.update(0);
+        breakout.processInput(deltaTime);
+        breakout.update(deltaTime);
 
         // Step 3.3: render frame
         auto& commandBuffer = swapper.beginFrame();
@@ -254,10 +273,11 @@ try
         };
         commandBuffer.beginRendering(renderingInfo);
 
-        //breakout.render();
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
         commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapper.getExtent().width), static_cast<float>(swapper.getExtent().height), 0.0f, 1.0f));
         commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapper.getExtent()));
+
+        //breakout.render();
         commandBuffer.draw(3, 1, 0, 0);
         
         commandBuffer.endRendering();
@@ -296,4 +316,3 @@ catch (...)
     cerr << "unknown error" << std::endl;
     return -1;
 }
-
