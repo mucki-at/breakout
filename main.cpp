@@ -4,7 +4,14 @@
 
 #include "common.h"
 #include "vkutils.h"
+#include "buffermanager.h"
+#include "swapchainmanager.h"
+#include "pipeline.h"
+#include "dynamicresource.h"
 #include "game.h"
+#include "texture.h"
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -24,6 +31,41 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
     }
 }
 
+void resize_callback(GLFWwindow* window, int width, int height)
+{
+    while (width == 0 || height == 0) {
+        glfwGetFramebufferSize(window, &width, &height);
+        glfwWaitEvents();
+    }
+}
+
+
+struct Vertex {
+    glm::vec2 pos;
+    glm::vec3 color;
+    glm::vec2 texCoord;
+
+    static vk::VertexInputBindingDescription getBindingDescription() {
+        return { 0, sizeof(Vertex), vk::VertexInputRate::eVertex };
+    }
+
+    static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescriptions() {
+        return {
+            vk::VertexInputAttributeDescription( 0, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, pos) ),
+            vk::VertexInputAttributeDescription( 1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color) ),
+            vk::VertexInputAttributeDescription( 2, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, texCoord) )
+        };
+    }
+};
+
+struct UniformBufferObject {
+    alignas(16) glm::mat4 model;
+    alignas(16) glm::mat4 view;
+    alignas(16) glm::mat4 proj;
+};
+
+using MyPipeline = Pipeline<Vertex, UniformBufferObject, 2>;
+
 
 //!@brief
 //!
@@ -31,8 +73,8 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 //!@param argv
 //!@return int
 int main(int argc, char* argv[])
-try
-{
+try {
+
     // Step 1: initialize graphics
     // Step 1.1: initialize glfw
     glfwInit();
@@ -96,6 +138,7 @@ try
         {
             .apiVersion = vk::ApiVersion13,
             .deviceExtensions = deviceExtensions,
+            .features = { .samplerAnisotropy = true },
             .surface = &surface
         }
     );
@@ -115,7 +158,7 @@ try
         vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
     > featureChain =
     {
-        {},                               // vk::PhysicalDeviceFeatures2 (empty for now)
+        {.features = {.samplerAnisotropy = true} },   // vk::PhysicalDeviceFeatures2 
         {.shaderDrawParameters = true },  // Enable shader draw parameters
         {
             .dynamicRendering = true,      // Enable dynamic rendering from Vulkan 1.3
@@ -137,104 +180,65 @@ try
     auto graphicsQueue = vk::raii::Queue(device, graphicsQueueIndex, 0);
     auto presentQueue = vk::raii::Queue(device, presentQueueIndex, 0);
 
+    auto allocator = vma::createAllocatorUnique({
+        .physicalDevice=physicalDevice,
+        .device=device,
+        .instance=instance
+    });
+    
+
+    auto bufferManager = BufferManager(*allocator, device, graphicsQueue, graphicsQueueIndex);
+
     //! create a swap chain
     auto swapper = SwapChainManager(
         device,
         graphicsQueue,
         presentQueue,
         graphicsQueueIndex,
-        2
+        MyPipeline::MaxFramesInFlight
     );
     swapper.reset(physicalDevice, surface);
 
-    //! create a pipeline
-    auto shaderModule=loadShaderModule(device, "shaders/slang.spv");
-    vk::PipelineShaderStageCreateInfo shaderStages[]=
-    {
-        vk::PipelineShaderStageCreateInfo
-        {
-            .stage = vk::ShaderStageFlagBits::eVertex,
-            .module = shaderModule,
-            .pName = "vertMain"
-        },
-        vk::PipelineShaderStageCreateInfo
-        {
-            .stage = vk::ShaderStageFlagBits::eFragment,
-            .module = shaderModule,
-            .pName = "fragMain"
-        }
-    };
-
-    auto dynamicStates={vk::DynamicState::eViewport, vk::DynamicState::eScissor};
-    auto dynamicState = vk::PipelineDynamicStateCreateInfo{}.setDynamicStates(dynamicStates);
-    
-    auto vertexInputInfo = vk::PipelineVertexInputStateCreateInfo{};
-    auto inputAssembly = vk::PipelineInputAssemblyStateCreateInfo
-    {
-        .topology = vk::PrimitiveTopology::eTriangleList
-    };
-    auto viewport = vk::Viewport
-    {
-        .x=0.0f,
-        .y=0.0f,
-        .width=static_cast<float>(swapper.getExtent().width),
-        .height=static_cast<float>(swapper.getExtent().height),
-        .minDepth=0.0f,
-        .maxDepth=1.0f
-    };
-    auto scissorRect=vk::Rect2D{ vk::Offset2D{ 0, 0 }, swapper.getExtent() };
-    auto viewportState = vk::PipelineViewportStateCreateInfo{}
-        .setViewports(viewport)
-        .setScissors(scissorRect);
-    auto rasterizer = vk::PipelineRasterizationStateCreateInfo
-    {
-        .cullMode = {}, //vk::CullModeFlagBits::eBack,
-        .lineWidth = 1.0f
-    };
-    auto multisampling=vk::PipelineMultisampleStateCreateInfo{};
-    auto colorBlendAttachment=vk::PipelineColorBlendAttachmentState
-    {
-        .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB
-    };
-    auto colorBlending=vk::PipelineColorBlendStateCreateInfo{}.setAttachments(colorBlendAttachment);
-    
-    auto pipelineLayoutInfo =vk::PipelineLayoutCreateInfo{};
-    auto pipelineLayout = vk::raii::PipelineLayout( device, pipelineLayoutInfo );
-
-    auto pipelineRenderingCreateInfo = vk::PipelineRenderingCreateInfo
-    {
-        .colorAttachmentCount = 1,
-        .pColorAttachmentFormats = &swapper.getFormat()
-    };
-
-    auto pipelineInfo = vk::GraphicsPipelineCreateInfo
-    {
-        .pNext = &pipelineRenderingCreateInfo,
-        .stageCount = 2,
-        .pStages = shaderStages,
-        .pVertexInputState = &vertexInputInfo,
-        .pInputAssemblyState = &inputAssembly,
-        .pViewportState = &viewportState,
-        .pRasterizationState = &rasterizer,
-        .pMultisampleState = &multisampling,
-        .pColorBlendState = &colorBlending,
-        .pDynamicState = &dynamicState,
-        .layout = pipelineLayout
-    };
-
-    auto graphicsPipeline = vk::raii::Pipeline(device, nullptr, pipelineInfo);
-
-    // Step 2: initialize Game
+   // Step 2: initialize Game
     auto breakout = Game(DefaultWidth, DefaultHeight);
     breakout.init();
 
     glfwSetKeyCallback(window, key_callback);
+    glfwSetFramebufferSizeCallback(window, resize_callback);
     glfwSetWindowUserPointer(window, &breakout);
 
     // Step 3: Run game loop
     float deltaTime = 0.0f;
     float lastFrame = 0.0f;
 
+    //! Load our resources
+    Vertex vertices[]= {
+        {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+        {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+        {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+        {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+    };
+    uint16_t indices[] = {
+        0, 1, 2, 2, 3, 0
+    };
+
+    auto buffer=bufferManager.createBuffer(
+        sizeof(vertices)+sizeof(indices),
+        vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
+        false
+    );
+    byte* ptr=static_cast<byte*>(bufferManager.getStage(0, sizeof(vertices)+sizeof(indices)));
+    memcpy(ptr, vertices, sizeof(vertices));
+    memcpy(ptr+sizeof(vertices), indices, sizeof(indices));
+    bufferManager.upload(buffer, vk::BufferCopy{.size=sizeof(vertices)+sizeof(indices)});
+
+    auto texture=createImageFromFile("textures/texture.jpg", bufferManager);
+    auto sampler=createSampler(physicalDevice, device);
+
+        //! create a pipeline
+    auto pipeline = MyPipeline(device, swapper, bufferManager, texture, sampler);
+
+ 
     while (!glfwWindowShouldClose(window))
     {
         // Step 3.1: wait until we are ready for next frame (present has finished)
@@ -253,6 +257,16 @@ try
 
         breakout.processInput(deltaTime);
         breakout.update(deltaTime);
+        
+        // dummy
+        UniformBufferObject ubo{};
+        ubo.model = glm::rotate(glm::mat4(1.0f), currentFrame * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.proj = glm::perspective(glm::radians(45.0f), static_cast<float>(swapper.getExtent().width) / static_cast<float>(swapper.getExtent().height), 0.1f, 10.0f);
+        ubo.proj[1][1] *= -1;
+
+        const auto& perFrame=pipeline.getNextFrame();
+        memcpy(perFrame.uniforms, &ubo, sizeof(ubo));
 
         // Step 3.3: render frame
         auto& commandBuffer = swapper.beginFrame();
@@ -272,13 +286,16 @@ try
             .pColorAttachments = &attachmentInfo
         };
         commandBuffer.beginRendering(renderingInfo);
-
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipeline);
         commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapper.getExtent().width), static_cast<float>(swapper.getExtent().height), 0.0f, 1.0f));
         commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapper.getExtent()));
 
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.getPipeline());
+        commandBuffer.bindVertexBuffers(0, {buffer}, {0});
+        commandBuffer.bindIndexBuffer(buffer, sizeof(vertices), vk::IndexType::eUint16);
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.getLayout(), 0, perFrame.descriptors, nullptr);
+
         //breakout.render();
-        commandBuffer.draw(3, 1, 0, 0);
+        commandBuffer.drawIndexed(6, 1, 0, 0, 0);
         
         commandBuffer.endRendering();
 
@@ -290,11 +307,7 @@ try
     }
 
     swapper.cleanup();
-
-    // delete all resources as loaded using the resource manager
-    // ---------------------------------------------------------
-    // ResourceManager::Clear();
-
+ 
     // Step 4: cleanup glfw (vulkan uses RAII and doesn't need cleanup code)
     glfwDestroyWindow(window);
     glfwTerminate();

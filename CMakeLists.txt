@@ -10,13 +10,10 @@ project (BreakOutVolcano VERSION 0.1.0 LANGUAGES CXX)
 
 
 find_package (glfw3 REQUIRED)
-#find_package (glm REQUIRED)
+find_package (glm REQUIRED)
 find_package (Vulkan REQUIRED)
-#find_package (tinyobjloader REQUIRED)
-#find_package (tinygltf REQUIRED)
-#find_package (KTX REQUIRED)
-#find_package(stb REQUIRED)
-#set(STB_INCLUDEDIR ${stb_INCLUDE_DIRS})
+find_package (VulkanMemoryAllocator CONFIG REQUIRED)
+find_package (VulkanMemoryAllocator-Hpp CONFIG REQUIRED)
 
 find_program(SLANGC_EXECUTABLE slangc HINTS $ENV{VULKAN_SDK}/bin REQUIRED)
 
@@ -48,9 +45,15 @@ add_executable (breakout
     main.cpp
     game.cpp
     vkutils.cpp
+    buffermanager.cpp
+    swapchainmanager.cpp
+    stb.cpp
+    vma.cpp
+    texture.cpp
 )
 
-target_link_libraries (breakout Vulkan::Vulkan glfw)
+target_link_libraries (breakout Vulkan::Vulkan glfw GPUOpen::VulkanMemoryAllocator VulkanMemoryAllocator-Hpp::VulkanMemoryAllocator-Hpp)
+
 #target_include_directories (breakout PRIVATE ${STB_INCLUDEDIR})
 
 add_slang_shaders(SOURCES shader.slang)
