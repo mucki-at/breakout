@@ -1,39 +1,35 @@
-/*******************************************************************
-** This code is part of Breakout.
-**
-** Breakout is free software: you can redistribute it and/or modify
-** it under the terms of the CC BY 4.0 license as published by
-** Creative Commons, either version 4 of the License, or (at your
-** option) any later version.
-******************************************************************/
-#include <iostream>
+//!@author mucki (code@mucki.dev)
+//!@copyright Copyright (c) 2025
+//! please see LICENSE file in root folder for licensing terms.
 
 #include "texture.h"
+#include "stb_image.h"
 
-
-Texture2D::Texture2D()
-    : Width(0), Height(0), Internal_Format(GL_RGB), Image_Format(GL_RGB), Wrap_S(GL_REPEAT), Wrap_T(GL_REPEAT), Filter_Min(GL_LINEAR), Filter_Max(GL_LINEAR)
+[[nodiscard]] DeviceImage createImageFromFile(
+    const string& filename,
+    const BufferManager& bufferManager
+)
 {
-    glGenTextures(1, &this->ID);
-}
+    int width, height, channels;
+    stbi_uc* pixels = stbi_load(filename.c_str(), &width, &height, &channels, STBI_rgb_alpha);
+    if (!pixels) {
+        throw std::runtime_error("failed to load texture image!");
+    }
 
-void Texture2D::Generate(unsigned int width, unsigned int height, unsigned char* data)
-{
-    this->Width = width;
-    this->Height = height;
-    // create Texture
-    glBindTexture(GL_TEXTURE_2D, this->ID);
-    glTexImage2D(GL_TEXTURE_2D, 0, this->Internal_Format, width, height, 0, this->Image_Format, GL_UNSIGNED_BYTE, data);
-    // set Texture wrap and filter modes
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, this->Wrap_S);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, this->Wrap_T);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, this->Filter_Min);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, this->Filter_Max);
-    // unbind texture
-    glBindTexture(GL_TEXTURE_2D, 0);
-}
+    auto desc = ImageDescription
+    {
+        .width = static_cast<uint32_t>(width),
+        .height = static_cast<uint32_t>(height),
+        .format = vk::Format::eR8G8B8A8Srgb
+    };
+    auto byteSize = static_cast<vk::DeviceSize>(width) * static_cast<vk::DeviceSize>(height) * 4;
+    auto image = bufferManager.createImage(desc, vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst);
+    memcpy(bufferManager.getStage(0, byteSize), pixels, byteSize);
+    bufferManager.upload(image, vk::BufferImageCopy{
+            .imageExtent = { desc.width, desc.height, 1 },
+            .imageSubresource = { vk::ImageAspectFlagBits::eColor, 0, 0, 1 }
+        });
+    stbi_image_free(pixels);
 
-void Texture2D::Bind() const
-{
-    glBindTexture(GL_TEXTURE_2D, this->ID);
+    return image;
 }
