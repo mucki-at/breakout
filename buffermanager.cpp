@@ -54,6 +54,7 @@ DeviceImage::DeviceImage(
     vk::ImageUsageFlags usage,
     const vma::AllocationCreateInfo& allocInfo
     ) :
+    description(description),
     allocator(allocator),
     image(nullptr),
     view(nullptr),
@@ -85,6 +86,7 @@ DeviceImage::DeviceImage(
 }
 
 DeviceImage::DeviceImage(DeviceImage&& rhs) :
+    description(exchange(rhs.description, {})),
     allocator(exchange(rhs.allocator, {})),
     image(exchange(rhs.image, {})),
     view(exchange(rhs.view, {})),
@@ -97,6 +99,7 @@ DeviceImage& DeviceImage::operator=(DeviceImage&& rhs)
 {
     if (this!=&rhs)
     {
+        swap(description, rhs.description);
         swap(allocator, rhs.allocator);
         swap(image, rhs.image);
         swap(view, rhs.view);

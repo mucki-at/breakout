@@ -7,19 +7,18 @@
 struct DeviceRequirements
 {
     uint32_t apiVersion = vk::ApiVersion10;
-    vk::PhysicalDeviceFeatures features = {};
     vk::QueueFlags queueFlags = vk::QueueFlagBits::eGraphics;
     std::vector<const char*> deviceExtensions = { vk::KHRSwapchainExtensionName };
-    const vk::raii::SurfaceKHR* surface = nullptr;
+    vk::SurfaceKHR surface = nullptr;
 };
 
-using DeviceScore=function<float(const vk::PhysicalDeviceProperties&, const vk::PhysicalDeviceFeatures&)>;
+using DeviceScore=function<float(const vk::PhysicalDeviceProperties&)>;
 
 [[nodiscard]] tuple<vk::raii::PhysicalDevice, uint32_t, uint32_t>
 findAppropriateDeviceAndQueueFamily(
     const vk::raii::Instance& instance,
     const DeviceRequirements& requirements={},
-    DeviceScore score=[](const vk::PhysicalDeviceProperties& dp, const vk::PhysicalDeviceFeatures& df){ return dp.deviceType==vk::PhysicalDeviceType::eDiscreteGpu ? 1.0 : 0.0; }
+    DeviceScore score=[](const vk::PhysicalDeviceProperties& dp){ return dp.deviceType==vk::PhysicalDeviceType::eDiscreteGpu ? 1.0 : 0.0; }
 );
 
 struct SwapChainRequirements

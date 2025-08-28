@@ -3,4 +3,4 @@
 //! please see LICENSE file in root folder for licensing terms.
 
 #define VMA_IMPLEMENTATION
-#include "vma.h"
+#include "vk_mem_alloc.hpp"

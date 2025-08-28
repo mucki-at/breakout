@@ -20,12 +20,11 @@
     {
         .width = static_cast<uint32_t>(width),
         .height = static_cast<uint32_t>(height),
-        .byteSize = static_cast<vk::DeviceSize>(width) * static_cast<vk::DeviceSize>(height) * 4,
         .format = vk::Format::eR8G8B8A8Srgb
     };
-
+    auto byteSize = static_cast<vk::DeviceSize>(width) * static_cast<vk::DeviceSize>(height) * 4;
     auto image = bufferManager.createImage(desc, vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst);
-    memcpy(bufferManager.getStage(0, desc.byteSize), pixels, desc.byteSize);
+    memcpy(bufferManager.getStage(0, byteSize), pixels, byteSize);
     bufferManager.upload(image, vk::BufferImageCopy{
             .imageExtent = { desc.width, desc.height, 1 },
             .imageSubresource = { vk::ImageAspectFlagBits::eColor, 0, 0, 1 }

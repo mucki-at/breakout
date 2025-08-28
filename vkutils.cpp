@@ -24,11 +24,9 @@ findAppropriateDeviceAndQueueFamily(
     for (const auto& device : physicalDevices)
     {
         auto properties=device.getProperties();
-        auto features=device.getFeatures();
 
         // check capabilities to make sure device is usable
         if (properties.apiVersion < requirements.apiVersion) continue;
-        if (features < requirements.features) continue;
 
         // because extension names use const char* instead of string and are also
         // unsorted this code is uglier than it has to be. But it checks whether all
@@ -52,7 +50,7 @@ findAppropriateDeviceAndQueueFamily(
         uint32_t presentIndex=0;
         if (requirements.surface)
         {
-            if (device.getSurfaceSupportKHR(queueIndex,*requirements.surface))
+            if (device.getSurfaceSupportKHR(queueIndex,requirements.surface))
             {
                 presentIndex=queueIndex;
             }
@@ -60,7 +58,7 @@ findAppropriateDeviceAndQueueFamily(
             {
                 for (presentIndex=0; presentIndex<queueFamilies.size(); ++presentIndex)
                 {
-                    if (device.getSurfaceSupportKHR(presentIndex,*requirements.surface)) break;
+                    if (device.getSurfaceSupportKHR(presentIndex,requirements.surface)) break;
                 }
             }
         }
@@ -70,7 +68,7 @@ findAppropriateDeviceAndQueueFamily(
         }
         if (presentIndex>=queueFamilies.size()) continue;
 
-        auto deviceScore=score(properties,features);
+        auto deviceScore=score(properties);
         if ((chosenPhysicalDevice==nullptr) || (deviceScore>bestScore))
         {
             chosenPhysicalDevice=std::move(device);

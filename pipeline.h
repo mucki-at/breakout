@@ -6,6 +6,7 @@
 #include "common.h"
 #include "swapchainmanager.h"
 #include "dynamicresource.h"
+#include "pipelinebuilder.h"
 
 template<typename Vertex_, typename Uniforms_, size_t MaxFramesInFlight_ = 2>
 class Pipeline
@@ -37,102 +38,12 @@ public:
         uniformBuffers(),
         perFrame()
     {
-        auto shaderModule=loadShaderModule(device, "shaders/slang.spv");
-        vk::PipelineShaderStageCreateInfo shaderStages[]=
-        {
-            vk::PipelineShaderStageCreateInfo
-            {
-                .stage = vk::ShaderStageFlagBits::eVertex,
-                .module = shaderModule,
-                .pName = "vertMain"
-            },
-            vk::PipelineShaderStageCreateInfo
-            {
-                .stage = vk::ShaderStageFlagBits::eFragment,
-                .module = shaderModule,
-                .pName = "fragMain"
-            }
-        };
-
-        auto dynamicStates={vk::DynamicState::eViewport, vk::DynamicState::eScissor};
-        auto dynamicState = vk::PipelineDynamicStateCreateInfo{}.setDynamicStates(dynamicStates);
-        
-        auto bindingDescription = Vertex::getBindingDescription();
-        auto attributeDescriptions = Vertex::getAttributeDescriptions();
-        auto vertexInputInfo = vk::PipelineVertexInputStateCreateInfo{}
-            .setVertexBindingDescriptions(bindingDescription)
-            .setVertexAttributeDescriptions(attributeDescriptions);
-
-        auto inputAssembly = vk::PipelineInputAssemblyStateCreateInfo
-        {
-            .topology = vk::PrimitiveTopology::eTriangleList
-        };
-        auto viewportState = vk::PipelineViewportStateCreateInfo{ .viewportCount=1, .scissorCount=1 };
-        auto rasterizer = vk::PipelineRasterizationStateCreateInfo
-        {
-            .cullMode = {}, //vk::CullModeFlagBits::eBack,
-            .lineWidth = 1.0f
-        };
-        auto multisampling=vk::PipelineMultisampleStateCreateInfo{};
-        auto colorBlendAttachment=vk::PipelineColorBlendAttachmentState
-        {
-            .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB
-        };
-        auto colorBlending=vk::PipelineColorBlendStateCreateInfo{}.setAttachments(colorBlendAttachment);
-    
-        vk::DescriptorSetLayoutBinding bindings[] =
-        {
-            { 0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex },
-            { 1, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment }
-        };
-
-        descriptorSetLayout = vk::raii::DescriptorSetLayout(device, vk::DescriptorSetLayoutCreateInfo{}.setBindings(bindings) );
-        auto pipelineLayoutInfo = vk::PipelineLayoutCreateInfo{};
-        pipelineLayoutInfo.setSetLayouts(*descriptorSetLayout);
-        layout = vk::raii::PipelineLayout( device, pipelineLayoutInfo );
-
-        auto pipelineRenderingCreateInfo = vk::PipelineRenderingCreateInfo
-        {
-            .colorAttachmentCount = 1,
-            .pColorAttachmentFormats = &swapper.getFormat()
-        };
-    
-        auto pipelineInfo = vk::GraphicsPipelineCreateInfo
-        {
-            .pNext = &pipelineRenderingCreateInfo,
-            .stageCount = 2,
-            .pStages = shaderStages,
-            .pVertexInputState = &vertexInputInfo,
-            .pInputAssemblyState = &inputAssembly,
-            .pViewportState = &viewportState,
-            .pRasterizationState = &rasterizer,
-            .pMultisampleState = &multisampling,
-            .pColorBlendState = &colorBlending,
-            .pDynamicState = &dynamicState,
-            .layout = layout
-        };
-
-        pipeline = vk::raii::Pipeline(device, nullptr, pipelineInfo);
-
         // descriptor sets
-        vk::DescriptorPoolSize poolSizes[]=
-        {
-            { .type=vk::DescriptorType::eUniformBuffer, .descriptorCount=MaxFramesInFlight },
-            { .type=vk::DescriptorType::eCombinedImageSampler, .descriptorCount=MaxFramesInFlight }
-        };
-        auto poolInfo=vk::DescriptorPoolCreateInfo
-        {
-            .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-            .maxSets = MaxFramesInFlight,
-        }.setPoolSizes(poolSizes);
-        descriptorPool = vk::raii::DescriptorPool(device, poolInfo);
+        DescriptorSetBuilder setBuilder;
+        setBuilder.bindings.emplace_back(0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex);
+        setBuilder.bindings.emplace_back(1, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment);
 
-        vector<vk::DescriptorSetLayout> layouts(2, *descriptorSetLayout);
-        auto allocInfo=vk::DescriptorSetAllocateInfo
-        {
-            .descriptorPool = descriptorPool
-        }.setSetLayouts(layouts);
-        descriptorSets=vk::raii::DescriptorSets(device, allocInfo);
+        tie(descriptorSetLayout, descriptorPool, descriptorSets) = setBuilder.buildLayoutAndSets(device, MaxFramesInFlight);
 
         // set up per frame data
         auto imageInfo = vk::DescriptorImageInfo
@@ -179,6 +90,27 @@ public:
             perFrame.current().descriptors = descriptorSets[i];
             perFrame.cycle();
         }
+        
+
+        PipelineLayoutBuilder layoutBuilder;
+        layoutBuilder.descriptorSets.push_back(descriptorSetLayout);
+        layout = layoutBuilder.build(device);
+
+        PipelineBuilder builder;
+
+        auto shaderModule=loadShaderModule(device, "shaders/slang.spv");
+        
+        builder.shaders.push_back({ .stage=vk::ShaderStageFlagBits::eVertex, .module=shaderModule, .pName="vertMain"});
+        builder.vertexInputBindings.push_back(Vertex::getBindingDescription());
+        builder.vertexInputAttributes=Vertex::getAttributeDescriptions();
+        builder.inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
+
+        builder.shaders.push_back({ .stage=vk::ShaderStageFlagBits::eFragment, .module=shaderModule, .pName="fragMain"});
+
+        builder.addColorAttachment(swapper.getFormat());
+        pipeline = builder.build(device,layout);
+
+
     }
 
     inline const vk::raii::Pipeline& getPipeline() const noexcept { return pipeline; }

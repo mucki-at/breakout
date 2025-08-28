@@ -1,8 +1,10 @@
 //!@author mucki (code@mucki.dev)
 //!@copyright Copyright (c) 2025
+//! please see LICENSE file in root folder for licensing terms.
 #pragma once
 
 #include "common.h"
+#include "spritemanager.h"
 
 //! @brief Game holds all game-related state and functionality.
 //! Combines all game-related data into a single class for
@@ -22,16 +24,14 @@ public:
 
 public:
     // constructor/destructor
-    Game(size_t width, size_t height);
+    Game(glm::vec2 fieldSize);
     ~Game();
 
-    // initialize game state (load all shaders/textures/levels)
-    void init();
-
     // game loop
+    void updateScreenSize();
     void processInput(float dt);
     void update(float dt);
-    void render();
+    void draw(const vk::CommandBuffer& commandBuffer) const;
 
     inline void setKey(size_t key, bool pressed)
     {
@@ -43,5 +43,10 @@ private:
     // game state
     State  state;
     bool   keys[KeyCount];
-    size_t width, height;
+    glm::vec2 fieldSize;
+
+    // draws all our sprites
+    SpriteManager sprites;
+
+    SpriteManager::Sprite dummy;
 };

@@ -39,7 +39,6 @@ struct ImageDescription
 {
     uint32_t width;
     uint32_t height;
-    vk::DeviceSize byteSize;
     vk::Format format;
 };
 
@@ -54,11 +53,13 @@ public:
     DeviceImage(DeviceImage&& rhs);
     DeviceImage& operator=(DeviceImage&& rhs);
 
+    inline const ImageDescription& getDescription() const noexcept { return description; }
     inline operator vk::Image() const noexcept { return image; }
     inline operator vk::ImageView() const noexcept { return view; }
     [[nodiscard]] inline void* offset(size_t ofs) const { return static_cast<byte*>(info.pMappedData)+ofs; }
 
 private:
+    ImageDescription description;
     vma::Allocator allocator;
     vk::Image image;
     vk::ImageView view;
