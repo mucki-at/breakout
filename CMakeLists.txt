@@ -50,6 +50,7 @@ endfunction()
 add_executable (breakout
     main.cpp
     game.cpp
+    level.cpp
     vkutils.cpp
     buffermanager.cpp
     swapchainmanager.cpp

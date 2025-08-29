@@ -11,13 +11,11 @@ Game::Game(glm::vec2 fieldSize) :
     state(Active),
     keys(),
     fieldSize(fieldSize),
-    sprites(100)
+    sprites(1024, 16)
 {
-    auto texId=sprites.createTexture("textures/awesomeface.png");
-
-    dummy=sprites.createSprite(fieldSize*0.5f, texId);
-    dummy->color.r=0;
-    dummy->color.b=0.25;
+    auto bg=sprites.getOrCreateTexture("background", "textures/background.jpg");
+    background=sprites.createSprite(fieldSize*0.5f, bg, fieldSize);
+    level=make_unique<Level>("levels/1.txt", glm::vec2{ fieldSize.x, fieldSize.y/2 }, sprites);
 }
 
 Game::~Game()
@@ -55,10 +53,6 @@ void Game::update(float dt)
 
 void Game::processInput(float dt)
 {
-    if (keys[GLFW_KEY_SPACE]==true)
-    {
-        dummy=nullptr;
-    }
 }
 
 void Game::draw(const vk::CommandBuffer& commandBuffer) const

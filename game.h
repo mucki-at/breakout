@@ -5,6 +5,7 @@
 
 #include "common.h"
 #include "spritemanager.h"
+#include "level.h"
 
 //! @brief Game holds all game-related state and functionality.
 //! Combines all game-related data into a single class for
@@ -47,6 +48,8 @@ private:
 
     // draws all our sprites
     SpriteManager sprites;
+    SpriteManager::Sprite background;
 
-    SpriteManager::Sprite dummy;
+    // level specific data
+    unique_ptr<Level> level;
 };

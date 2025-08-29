@@ -1,3 +1,4 @@
 .vscode/
 build/
 shaders/
+textures/.DS_Store

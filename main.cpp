@@ -121,7 +121,7 @@ try {
         breakout->update(deltaTime);
         
         // Step 3.3: render frame
-        auto& commandBuffer = vulkan.beginFrame(vk::ClearColorValue(0.0f, 0.0f, 0.25f, 1.0f));
+        auto& commandBuffer = vulkan.beginFrame(vk::ClearColorValue(0.0f, 0.0f, 0.05f, 1.0f));
 
         breakout->draw(commandBuffer);
 
