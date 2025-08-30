@@ -64,3 +64,7 @@ Level::Level(const filesystem::path& path, glm::vec2 size, SpriteManager& sprite
     }  
 }
 
+bool Level::isComplete()
+{
+    return ranges::all_of(bricks, [](auto&&b) { return b.solid || b.sprite==nullptr; });
+}

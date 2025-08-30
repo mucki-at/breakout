@@ -7,7 +7,7 @@
 #include <GLFW/glfw3.h>
 
 //! @brief constructor
-Game::Game(glm::vec2 fieldSize) :
+Game::Game(const filesystem::path& levels, glm::vec2 fieldSize) :
     state(Active),
     keys(),
     fieldSize(fieldSize),
@@ -16,14 +16,23 @@ Game::Game(glm::vec2 fieldSize) :
     playerSize = {100.0f, 25.0f};
     playerVelocity = 500.0f;
 
+    for (auto const& dir_entry : std::filesystem::directory_iterator{levels})
+    {
+        if (dir_entry.is_regular_file()) levelList.push_back(dir_entry.path());
+    }
+    if (levelList.empty()) throw runtime_error("Failed to find any levels");
+    ranges::sort(levelList);
+    curLevel=levelList.end();
+
     auto bg=sprites.getOrCreateTexture("background", "textures/background.jpg");
     background=sprites.createSprite(fieldSize*0.5f, bg, fieldSize);
-    level=make_unique<Level>("levels/1.txt", glm::vec2{ fieldSize.x, fieldSize.y/2 }, sprites);
     player=sprites.createSprite(
         {fieldSize.x*0.5f, fieldSize.y-playerSize.y},
         sprites.getOrCreateTexture("paddle","textures/out.png"),
         playerSize
     );
+
+    nextLevel();
 }
 
 Game::~Game()
@@ -57,8 +66,19 @@ void Game::updateScreenSize()
 
 void Game::update(float dt)
 {
+    if (level->isComplete()) nextLevel();
+}
+
+void Game::processInput(float dt)
+{
     if (state == Active)
     {
+        if (keys[GLFW_KEY_L])
+        {
+            nextLevel();
+            keys[GLFW_KEY_L]=false;
+        }
+
         float movement = playerVelocity * dt;
         // move playerboard
         if (keys[GLFW_KEY_LEFT] || keys[GLFW_KEY_A])
@@ -72,11 +92,17 @@ void Game::update(float dt)
     }
 }
 
-void Game::processInput(float dt)
-{
-}
-
 void Game::draw(const vk::CommandBuffer& commandBuffer) const
 {
     sprites.drawSprites(commandBuffer);
+}
+
+void Game::nextLevel()
+{
+    if (curLevel==levelList.end()) curLevel=levelList.begin();
+    else ++curLevel;
+    if (curLevel==levelList.end()) curLevel=levelList.begin();
+
+    level=make_unique<Level>(*curLevel, glm::vec2{ fieldSize.x, fieldSize.y/2 }, sprites);
+    player->pos={fieldSize.x*0.5f, fieldSize.y-playerSize.y};
 }

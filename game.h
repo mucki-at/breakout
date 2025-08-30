@@ -25,7 +25,7 @@ public:
 
 public:
     // constructor/destructor
-    Game(glm::vec2 fieldSize);
+    Game(const filesystem::path& levels, glm::vec2 fieldSize);
     ~Game();
 
     // game loop
@@ -54,5 +54,8 @@ private:
     SpriteManager::Sprite player;
 
     // level specific data
+    vector<filesystem::path> levelList;
+    vector<filesystem::path>::const_iterator curLevel;
     unique_ptr<Level> level;
+    void nextLevel();
 };

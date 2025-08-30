@@ -90,7 +90,7 @@ try {
 
 
    // Step 2: initialize Game
-    auto breakout = make_unique<Game>(LogicalSize);
+    auto breakout = make_unique<Game>("levels",LogicalSize);
     breakout->updateScreenSize();
 
     glfwSetKeyCallback(window, key_callback);

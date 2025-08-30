@@ -11,6 +11,8 @@ class Level
 public:
     Level(const filesystem::path& file, glm::vec2 size, SpriteManager& sprites);
 
+    bool isComplete();
+    
 private:
     struct Brick
     {
