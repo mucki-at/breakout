@@ -13,9 +13,17 @@ Game::Game(glm::vec2 fieldSize) :
     fieldSize(fieldSize),
     sprites(1024, 16)
 {
+    playerSize = {100.0f, 25.0f};
+    playerVelocity = 500.0f;
+
     auto bg=sprites.getOrCreateTexture("background", "textures/background.jpg");
     background=sprites.createSprite(fieldSize*0.5f, bg, fieldSize);
     level=make_unique<Level>("levels/1.txt", glm::vec2{ fieldSize.x, fieldSize.y/2 }, sprites);
+    player=sprites.createSprite(
+        {fieldSize.x*0.5f, fieldSize.y-playerSize.y},
+        sprites.getOrCreateTexture("paddle","textures/out.png"),
+        playerSize
+    );
 }
 
 Game::~Game()
@@ -49,6 +57,19 @@ void Game::updateScreenSize()
 
 void Game::update(float dt)
 {
+    if (state == Active)
+    {
+        float movement = playerVelocity * dt;
+        // move playerboard
+        if (keys[GLFW_KEY_LEFT] || keys[GLFW_KEY_A])
+        {
+            player->pos.x = max(player->pos.x-movement, playerSize.x*0.5f);
+        }
+        if (keys[GLFW_KEY_RIGHT] || keys[GLFW_KEY_D])
+        {
+            player->pos.x = min(player->pos.x+movement, fieldSize.x-playerSize.x*0.5f);
+        }
+    }
 }
 
 void Game::processInput(float dt)

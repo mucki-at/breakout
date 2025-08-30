@@ -49,6 +49,9 @@ private:
     // draws all our sprites
     SpriteManager sprites;
     SpriteManager::Sprite background;
+    glm::vec2 playerSize;
+    float playerVelocity;
+    SpriteManager::Sprite player;
 
     // level specific data
     unique_ptr<Level> level;

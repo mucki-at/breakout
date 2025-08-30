@@ -28,8 +28,8 @@ Level::Level(const filesystem::path& path, glm::vec2 size, SpriteManager& sprite
     // calculate dimensions
     unsigned int height = tileData.size();
     unsigned int width  = tileData[0].size();
-    float unit_width    = floor(size.x / static_cast<float>(width));
-    float unit_height   = floor(size.y / static_cast<float>(height));
+    float unit_width    = size.x / static_cast<float>(width);
+    float unit_height   = size.y / static_cast<float>(height);
 
     glm::vec4 colors[]=
     {
