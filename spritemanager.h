@@ -21,18 +21,19 @@ private:
     };
 
 public:
+    using Texture = glm::u8;
     struct SpriteData : public SpritePushData
     {
-        glm::u8 textureId = 0;
+        Texture texture = 0;
 
         SpriteData(
             const glm::vec2& pos,
             const glm::vec2& size,
             const glm::vec4& color,
-            glm::u8 textureId
+            Texture texture
         ) :
             SpritePushData(pos, size, color),
-            textureId(textureId)
+            texture(texture)
         {}
 
     };
@@ -40,21 +41,25 @@ public:
 private:
     struct SpriteEntry : public SpriteData
     {
-        bool valid=false;
-
+    public:
         SpriteEntry(
             const glm::vec2& pos,
             const glm::vec2& size,
             const glm::vec4& color,
-            glm::u8 textureId
+            Texture texture
         ) :
-            SpriteData(pos, size, color, textureId),
+            SpriteData(pos, size, color, texture),
             valid(true)
         {}
+
+    private:
+        bool valid=false;
+        friend class SpriteManager;
     };
 
     struct TextureEntry
     {
+        Texture id;
         DeviceImage image;
         vk::raii::Sampler sampler;
     };
@@ -72,10 +77,13 @@ private:
 public:
     SpriteManager(size_t maxSprites, size_t maxTextures=256);
 
-    glm::u8 createTexture(const std::string& filename);
+//    Texture recreateTexture(const string& name, const filesystem::path& filename);
+    Texture getOrCreateTexture(const string& name, const filesystem::path& filename);
+//    void releaseTexture(const string& name);
+
     Sprite createSprite(
         glm::vec2 pos,
-        glm::u8 texture,
+        Texture texture,
         glm::vec2 size = Automatic,
         glm::vec4 color = { 1.0f, 1.0f, 1.0f, 1.0f }
     );
@@ -92,5 +100,8 @@ private:
     vk::raii::DescriptorSets descriptors;
     
     Container sprites;
-    vector<TextureEntry> textures;
+    map<string, TextureEntry> textures;
+    vector<Texture> freeTextureIds;
+
+    Texture createTextureEntry(const string& name, const filesystem::path& filename);
 };

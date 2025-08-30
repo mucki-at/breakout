@@ -6,7 +6,10 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <map>
 #include <algorithm>
+#include <numeric>
+#include <filesystem>
 using namespace std;
 
 #define VK_ENABLE_BETA_EXTENSIONS

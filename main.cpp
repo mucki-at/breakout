@@ -90,7 +90,7 @@ try {
 
 
    // Step 2: initialize Game
-    auto breakout = make_unique<Game>(LogicalSize);
+    auto breakout = make_unique<Game>("levels",LogicalSize);
     breakout->updateScreenSize();
 
     glfwSetKeyCallback(window, key_callback);
@@ -121,7 +121,7 @@ try {
         breakout->update(deltaTime);
         
         // Step 3.3: render frame
-        auto& commandBuffer = vulkan.beginFrame(vk::ClearColorValue(0.0f, 0.0f, 0.25f, 1.0f));
+        auto& commandBuffer = vulkan.beginFrame(vk::ClearColorValue(0.0f, 0.0f, 0.05f, 1.0f));
 
         breakout->draw(commandBuffer);
 

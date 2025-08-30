@@ -5,6 +5,7 @@
 
 #include "common.h"
 #include "spritemanager.h"
+#include "level.h"
 
 //! @brief Game holds all game-related state and functionality.
 //! Combines all game-related data into a single class for
@@ -24,7 +25,7 @@ public:
 
 public:
     // constructor/destructor
-    Game(glm::vec2 fieldSize);
+    Game(const filesystem::path& levels, glm::vec2 fieldSize);
     ~Game();
 
     // game loop
@@ -47,6 +48,14 @@ private:
 
     // draws all our sprites
     SpriteManager sprites;
+    SpriteManager::Sprite background;
+    glm::vec2 playerSize;
+    float playerVelocity;
+    SpriteManager::Sprite player;
 
-    SpriteManager::Sprite dummy;
+    // level specific data
+    vector<filesystem::path> levelList;
+    vector<filesystem::path>::const_iterator curLevel;
+    unique_ptr<Level> level;
+    void nextLevel();
 };
