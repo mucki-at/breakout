@@ -12,6 +12,8 @@ public:
     Level(const filesystem::path& file, glm::vec2 size, SpriteManager& sprites);
 
     bool isComplete();
+
+    pair<SpriteManager::Sprite,glm::vec2> getBallCollision(const glm::vec2& pos, float radius);
     
 private:
     struct Brick

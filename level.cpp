@@ -64,6 +64,28 @@ Level::Level(const filesystem::path& path, glm::vec2 size, SpriteManager& sprite
     }  
 }
 
+pair<SpriteManager::Sprite, glm::vec2> Level::getBallCollision(const glm::vec2& pos, float radius)
+{
+    for (auto&& b : bricks)
+    {
+        if (b.sprite)
+        {
+            glm::vec2 halfBlockSize=b.sprite->size*0.5f;
+            // find closest point on sprite
+            glm::vec2 closest=pos-b.sprite->pos;    // vector to ball relative to brick
+            closest = glm::clamp(closest, -halfBlockSize, halfBlockSize);   // clamped to brick size
+            closest += b.sprite->pos; // transform into world coordinates
+            if (glm::length(closest-pos) < radius) // hit
+            {
+                auto result=b.sprite;
+                if (!b.solid) b.sprite=nullptr; // destroy block
+                return tie(result, closest);
+            }
+        }
+    }
+    return make_pair(SpriteManager::Sprite{}, glm::vec2{});
+}
+
 bool Level::isComplete()
 {
     return ranges::all_of(bricks, [](auto&&b) { return b.solid || b.sprite==nullptr; });
