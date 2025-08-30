@@ -14,6 +14,10 @@ class Game
 {
 public:
     static constexpr size_t KeyCount = 1024;
+    static constexpr glm::vec2 InitialBallVelocity = { 100.0f, -350.0f };
+    static constexpr float InitialBallSize = 12.5f;
+    static constexpr glm::vec2 InitialPlayerSize = { 100.0f, 25.0f };
+    static constexpr float PlayerVelocity = 300.0f;
 
 public:
     enum State
@@ -21,6 +25,14 @@ public:
         Active,
         Menu,
         Win
+    };
+
+    struct Ball
+    {
+        SpriteManager::Sprite sprite;
+        bool stuck;
+        float radius;
+        glm::vec2 velocity;
     };
 
 public:
@@ -49,13 +61,14 @@ private:
     // draws all our sprites
     SpriteManager sprites;
     SpriteManager::Sprite background;
-    glm::vec2 playerSize;
-    float playerVelocity;
     SpriteManager::Sprite player;
+    Ball ball;
+    void reflectBall(bool horizontal, float limit);
 
     // level specific data
     vector<filesystem::path> levelList;
     vector<filesystem::path>::const_iterator curLevel;
     unique_ptr<Level> level;
+    void resetPlayer();
     void nextLevel();
 };
