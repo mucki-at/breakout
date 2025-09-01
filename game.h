@@ -6,6 +6,7 @@
 #include "common.h"
 #include "spritemanager.h"
 #include "level.h"
+#include "audiomanager.h"
 
 //! @brief Game holds all game-related state and functionality.
 //! Combines all game-related data into a single class for
@@ -71,4 +72,7 @@ private:
     unique_ptr<Level> level;
     void resetPlayer();
     void nextLevel();
+
+    AudioManager audioManager;
+    AudioManager::Audio go,dink,solid,lost;
 };

@@ -7,12 +7,12 @@ set(CMAKE_VERBOSE_MAKEFILE OFF CACHE BOOL "OFF" FORCE)
 
 project (BreakOutVolcano VERSION 0.1.0 LANGUAGES CXX)
 
-
-find_package (glfw3 REQUIRED)
-find_package (glm REQUIRED)
+find_package (glfw3 CONFIG REQUIRED)
+find_package (glm CONFIG REQUIRED)
 find_package (Vulkan REQUIRED)
 find_package (VulkanMemoryAllocator CONFIG REQUIRED)
 find_package (VulkanMemoryAllocator-Hpp CONFIG REQUIRED)
+find_package (SDL3 CONFIG REQUIRED)
 
 find_program(SLANGC_EXECUTABLE slangc HINTS $ENV{VULKAN_SDK}/bin REQUIRED)
 
@@ -60,9 +60,16 @@ add_executable (breakout
     stb.cpp
     vma.cpp
     texture.cpp
+    audiomanager.cpp
 )
 
-target_link_libraries (breakout Vulkan::Vulkan glfw GPUOpen::VulkanMemoryAllocator VulkanMemoryAllocator-Hpp::VulkanMemoryAllocator-Hpp)
+target_link_libraries (breakout
+    Vulkan::Vulkan
+    glfw
+    GPUOpen::VulkanMemoryAllocator
+    VulkanMemoryAllocator-Hpp::VulkanMemoryAllocator-Hpp
+    SDL3::SDL3
+)
 
 #target_include_directories (breakout PRIVATE ${STB_INCLUDEDIR})
 

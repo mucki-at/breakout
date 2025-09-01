@@ -36,6 +36,12 @@ Game::Game(const filesystem::path& levels, glm::vec2 fieldSize) :
         { ball.radius*2.2f, ball.radius*2.2f }
     );
     nextLevel();
+
+    go=audioManager.loadWav("sounds/go.wav");
+    dink=audioManager.loadWav("sounds/dink.wav");
+    solid=audioManager.loadWav("sounds/solid.wav");
+    lost=audioManager.loadWav("sounds/lost.wav");
+
 }
 
 Game::~Game()
@@ -89,6 +95,7 @@ void Game::update(float dt)
         if (bp.y <= ball.radius) reflectBall(false, ball.radius);
         else if (bp.y >= fieldSize.y)
         {
+            lost->play();
             resetPlayer();
             return;
         }
@@ -156,6 +163,7 @@ void Game::processInput(float dt)
         {
             ball.stuck=false;
             keys[GLFW_KEY_SPACE]=false;
+            go->play();
         }
     }
 }
@@ -167,6 +175,7 @@ void Game::draw(const vk::CommandBuffer& commandBuffer) const
 
 void Game::reflectBall(bool horizontal, float limit)
 {
+    dink->play();
     auto& bp=ball.sprite->pos;
     if (horizontal)
     {

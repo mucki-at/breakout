@@ -17,6 +17,8 @@
 #include "texture.h"
 #include <glm/glm.hpp>
 
+#include <SDL3/SDL.h>
+
 
 static inline constexpr glm::vec2 LogicalSize = { 800.0f, 600.0f };
 
@@ -51,6 +53,8 @@ void resize_callback(GLFWwindow* window, int width, int height)
 //!@return int
 int main(int argc, char* argv[])
 try {
+
+    SDL_Init(SDL_INIT_AUDIO);
 
     // Step 1: initialize graphics
     // Step 1.1: initialize glfw
@@ -142,6 +146,7 @@ try {
     glfwDestroyWindow(window);
     glfwTerminate();
 
+    SDL_Quit();
     return 0;
 }
 catch (vk::SystemError& e)
