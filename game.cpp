@@ -4,7 +4,7 @@
 #include "game.h"
 #include "vulkan.h"
 #include <glm/ext/matrix_clip_space.hpp>
-#include <GLFW/glfw3.h>
+#include <SDL3/SDL_scancode.h>
 
 //! @brief constructor
 Game::Game(const filesystem::path& levels, glm::vec2 fieldSize) :
@@ -142,27 +142,27 @@ void Game::processInput(float dt)
 {
     if (state == Active)
     {
-        if (keys[GLFW_KEY_L])
+        if (keys[SDL_SCANCODE_L])
         {
             nextLevel();
-            keys[GLFW_KEY_L]=false;
+            keys[SDL_SCANCODE_L]=false;
         }
 
         float ds = PlayerVelocity * dt;
         // move playerboard
-        if (keys[GLFW_KEY_LEFT] || keys[GLFW_KEY_A])
+        if (keys[SDL_SCANCODE_LEFT] || keys[SDL_SCANCODE_A])
         {
             player->pos.x = max(player->pos.x-ds, player->size.x*0.5f);
         }
-        if (keys[GLFW_KEY_RIGHT] || keys[GLFW_KEY_D])
+        if (keys[SDL_SCANCODE_RIGHT] || keys[SDL_SCANCODE_D])
         {
             player->pos.x = min(player->pos.x+ds, fieldSize.x-player->size.x*0.5f);
         }
 
-        if (keys[GLFW_KEY_SPACE] && ball.stuck)
+        if (keys[SDL_SCANCODE_SPACE] && ball.stuck)
         {
             ball.stuck=false;
-            keys[GLFW_KEY_SPACE]=false;
+            keys[SDL_SCANCODE_SPACE]=false;
             go->play();
         }
     }

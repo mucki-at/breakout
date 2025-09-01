@@ -4,7 +4,7 @@
 
 #include "common.h"
 
-#define VULKAN_INCLUDE_GLFW
+#define VULKAN_INCLUDE_SDL3
 #include "vulkan.h"
 
 #include "vkutils.h"
@@ -18,33 +18,12 @@
 #include <glm/glm.hpp>
 
 #include <SDL3/SDL.h>
-
+#include <chrono>
 
 static inline constexpr glm::vec2 LogicalSize = { 800.0f, 600.0f };
 
-void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
-{
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, true);
-
-    if (key >= 0)
-    {
-        Game* game=static_cast<Game*>(glfwGetWindowUserPointer(window));
-        if (game) game->setKey(key, action != GLFW_RELEASE);
-    }
-}
-
-void resize_callback(GLFWwindow* window, int width, int height)
-{
-    while (width == 0 || height == 0) {
-        glfwGetFramebufferSize(window, &width, &height);
-        glfwWaitEvents();
-    }
-
-    Game* game=static_cast<Game*>(glfwGetWindowUserPointer(window));
-    if (game) game->updateScreenSize();
-}
-
+using GameClock = chrono::high_resolution_clock;
+using Seconds = chrono::duration<float>;
 
 //!@brief
 //!
@@ -53,24 +32,26 @@ void resize_callback(GLFWwindow* window, int width, int height)
 //!@return int
 int main(int argc, char* argv[])
 try {
-
-    SDL_Init(SDL_INIT_AUDIO);
-
     // Step 1: initialize graphics
-    // Step 1.1: initialize glfw
-    glfwInit();
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    auto window = glfwCreateWindow(LogicalSize.x, LogicalSize.y, "Break Out Volcano !!", nullptr, nullptr);
+    // Step 1.1: initialize SDL
+    SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
+    auto window = SDL_CreateWindow(
+        "Break Out Volcano !!",
+        LogicalSize.x,
+        LogicalSize.y,
+        SDL_WINDOW_RESIZABLE | 
+        SDL_WINDOW_HIGH_PIXEL_DENSITY |
+        SDL_WINDOW_VULKAN
+    );
 
     // Step 1.2: initialize Vulkan
-    vulkan.initializeInstanceGlfw(
+    vulkan.initializeInstanceSDL3(
         "Break Out Volcano",
         vk::makeVersion(1, 0, 0)
     );
  
     //! Find the proper physical and logical device
-    vulkan.initializeDeviceGlfw(
+    vulkan.initializeDeviceSDL3(
         window,
         vk::ApiVersion13,
         {
@@ -97,16 +78,61 @@ try {
     auto breakout = make_unique<Game>("levels",LogicalSize);
     breakout->updateScreenSize();
 
-    glfwSetKeyCallback(window, key_callback);
-    glfwSetFramebufferSizeCallback(window, resize_callback);
-    glfwSetWindowUserPointer(window, breakout.get());
-
     // Step 3: Run game loop
-    float deltaTime = 0.0f;
-    float lastFrame = 0.0f;
+    auto lastFrame=GameClock::now();
+    bool done=false;
+    SDL_Event event;
+    bool paused=false;
 
-    while (!glfwWindowShouldClose(window))
+    while (!done)
     {
+        while (SDL_PollEvent(&event))
+        {
+            switch (event.type)
+            {
+            case SDL_EVENT_WINDOW_RESIZED:
+                breakout->updateScreenSize();
+                break;
+
+            case SDL_EVENT_QUIT:
+            case SDL_EVENT_TERMINATING:
+                done=true; break;
+
+            case SDL_EVENT_WILL_ENTER_BACKGROUND:
+            case SDL_EVENT_WINDOW_HIDDEN:
+            case SDL_EVENT_WINDOW_MINIMIZED:
+                paused=true; break;
+
+            case SDL_EVENT_DID_ENTER_FOREGROUND:
+            case SDL_EVENT_WINDOW_MAXIMIZED:         /**< Window has been maximized */
+            case SDL_EVENT_WINDOW_RESTORED:
+            case SDL_EVENT_WINDOW_SHOWN:
+                if (paused)
+                {
+                    lastFrame=GameClock::now();
+                    paused=false;
+                }
+                break;
+                
+
+            case SDL_EVENT_KEY_DOWN:
+                breakout->setKey(event.key.scancode, true);
+                break;
+
+            case SDL_EVENT_KEY_UP:
+                breakout->setKey(event.key.scancode, false);
+
+            default: break;
+            }
+        }
+
+        if (paused)
+        {
+            SDL_WaitEventTimeout(nullptr, 250);
+            continue;
+        }
+
+
         // Step 3.1: wait until we are ready for next frame (present has finished)
         if (vulkan.waitForNextFrame())
         {
@@ -116,13 +142,12 @@ try {
         }
 
         // Step 3.2: process input and update game state
-        float currentFrame = glfwGetTime();
-        deltaTime = currentFrame - lastFrame;
+        auto currentFrame = GameClock::now();
+        auto deltaTime = chrono::duration_cast<Seconds>(currentFrame-lastFrame);
         lastFrame = currentFrame;
-        glfwPollEvents();
 
-        breakout->processInput(deltaTime);
-        breakout->update(deltaTime);
+        breakout->processInput(deltaTime.count());
+        breakout->update(deltaTime.count());
         
         // Step 3.3: render frame
         auto& commandBuffer = vulkan.beginFrame(vk::ClearColorValue(0.0f, 0.0f, 0.05f, 1.0f));
@@ -137,15 +162,12 @@ try {
 
     vulkan.getDevice().waitIdle();
 
-    glfwSetWindowUserPointer(window, nullptr);
     breakout=nullptr;
 
     vulkan.cleanup();
  
-    // Step 4: cleanup glfw (vulkan uses RAII and doesn't need cleanup code)
-    glfwDestroyWindow(window);
-    glfwTerminate();
-
+    // Step 4: cleanup SDL (vulkan uses RAII and doesn't need cleanup code)
+    SDL_DestroyWindow(window);
     SDL_Quit();
     return 0;
 }
