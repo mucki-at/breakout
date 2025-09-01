@@ -13,6 +13,10 @@
 #include <GLFW/glfw3.h>
 #endif
 
+#ifdef VULKAN_INCLUDE_SDL3
+#include <SDL3/SDL_vulkan.h>
+#endif
+
 class Vulkan
 {
 public:
@@ -44,6 +48,25 @@ public:
         return initializeInstance(name, version, requiredExtensions, instanceCreateFlags, apiVersion);
     }
 #endif
+
+#ifdef VULKAN_INCLUDE_SDL3
+    void initializeInstanceSDL3(
+        const char* name,
+        uint32_t version,
+        vector<const char*> requiredExtensions={},
+        vk::InstanceCreateFlags instanceCreateFlags={},
+        uint32_t apiVersion=vk::ApiVersion14
+    )
+    {
+        Uint32 sdlExtensionCount=0;
+        auto sdlExtensions = SDL_Vulkan_GetInstanceExtensions(&sdlExtensionCount);
+        if (sdlExtensions==nullptr) throw runtime_error("failed to get SDL instance extensions: "s+SDL_GetError());
+
+        copy(sdlExtensions, sdlExtensions+sdlExtensionCount, back_inserter(requiredExtensions));
+        return initializeInstance(name, version, requiredExtensions, instanceCreateFlags, apiVersion);
+    }
+#endif
+
 
     template<typename... Features>
     inline void initializeDevice
@@ -77,6 +100,26 @@ public:
         VkSurfaceKHR surfaceHandle;
         if (glfwCreateWindowSurface(*instance, window, nullptr, &surfaceHandle) != 0)
             throw std::runtime_error("failed to create window surface!");
+    
+        surface=vk::raii::SurfaceKHR(instance, surfaceHandle); // make RAII type from SDL created
+
+        return initializeDevice<Features...>(apiVersion, deviceExtensions, std::forward<Features>(features)...);
+    }
+#endif
+
+#ifdef VULKAN_INCLUDE_SDL3
+    template<typename... Features>
+    void initializeDeviceSDL3
+    (
+        SDL_Window* window,
+        uint32_t apiVersion,
+        const vector<const char*>& deviceExtensions,
+        Features&&... features
+    )
+    {
+        VkSurfaceKHR surfaceHandle;
+        if (!SDL_Vulkan_CreateSurface(window, *instance, nullptr, &surfaceHandle))
+            throw std::runtime_error("failed to create window surface: "s+SDL_GetError());
     
         surface=vk::raii::SurfaceKHR(instance, surfaceHandle); // make RAII type from SDL created
 
