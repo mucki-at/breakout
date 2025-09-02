@@ -6,7 +6,7 @@
 #include <fstream>
 #include <sstream>
 
-Level::Level(const filesystem::path& path, glm::vec2 size, SpriteManager& sprites)
+Level::Level(const filesystem::path& path, glm::vec2 size, SpriteManager& sprites, size_t layer)
 {
     block = sprites.getOrCreateTexture("block", "textures/block.png");
     solid = sprites.getOrCreateTexture("solid", "textures/solid.png");
@@ -53,6 +53,7 @@ Level::Level(const filesystem::path& path, glm::vec2 size, SpriteManager& sprite
             bool isSolid=color==1;
             bricks.emplace_back(
                 sprites.createSprite(
+                    layer, 
                     {unit_width * x + unit_width*0.5f, unit_height * y + unit_height*0.5f},
                     isSolid ? solid:block,
                     {unit_width, unit_height},

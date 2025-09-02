@@ -7,19 +7,24 @@
 #include "vulkan.h"
 
 SpriteManager::SpriteManager(
-    size_t maxSprites,
+    size_t layers,
+    size_t maxSpritesPerLayer,
     size_t maxTextures
 ) :
     pipelineLayout(nullptr),
     pipeline(nullptr),
     descriptorLayout(nullptr),
     descriptorPool(nullptr),
-    descriptors(nullptr)
+    descriptors(nullptr),
+    layers(layers),
+    freeTextureIds(maxTextures)
 {
-    if (maxTextures>256) throw runtime_error("SpriteManager cannot handle more than 256 textures.");
+    for (auto& l : this->layers)
+    {
+        l.sprites.reserve(maxSpritesPerLayer);
+    }
 
-    sprites.reserve(maxSprites);
-    freeTextureIds.resize(maxTextures);
+    if (maxTextures>256) throw runtime_error("SpriteManager cannot handle more than 256 textures.");
     iota(freeTextureIds.rbegin(), freeTextureIds.rend(), 0);
 
     DescriptorSetBuilder descBuilder;
@@ -28,7 +33,7 @@ SpriteManager::SpriteManager(
 
     PipelineLayoutBuilder layoutBuilder;
     layoutBuilder.descriptorSets.push_back(descriptorLayout);
-    layoutBuilder.pushConstants.emplace_back(vk::ShaderStageFlagBits::eVertex, 0, sizeof(transformation)+sizeof(SpritePushData));
+    layoutBuilder.pushConstants.emplace_back(vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4)+sizeof(SpritePushData));
     pipelineLayout=layoutBuilder.build(vulkan.getDevice());
 
     PipelineBuilder builder;
@@ -42,7 +47,7 @@ SpriteManager::SpriteManager(
         vk::PipelineColorBlendAttachmentState{
             .blendEnable = true,
             .colorBlendOp = vk::BlendOp::eAdd,
-            .srcColorBlendFactor = vk::BlendFactor::eOne,
+            .srcColorBlendFactor = vk::BlendFactor::eSrcAlpha,
             .dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
             .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB
         }
@@ -117,6 +122,7 @@ SpriteManager::Texture SpriteManager::createTextureEntry(const string& name, con
 }
 
 SpriteManager::Sprite SpriteManager::createSprite(
+    size_t layer,
     glm::vec2 pos,
     Texture texture,
     glm::vec2 size,
@@ -130,37 +136,61 @@ SpriteManager::Sprite SpriteManager::createSprite(
         auto&& desc=finder->second.image.getDescription();
         size={ desc.width, desc.height };
     }
-    if (sprites.size()<sprites.capacity())
+    auto& l = layers[layer];
+    if (l.sprites.size()<l.sprites.capacity())
     {
-        sprites.emplace_back(pos,size,color,texture);
-        return makeSprite(sprites.end()-1);
+        l.sprites.emplace_back(pos,size,color,texture);
+        return makeSprite(l.sprites.end()-1);
     }
-    for (auto iter=sprites.begin(); iter!=sprites.end(); ++iter)
+    else
     {
-        if (iter->valid == false)
+        for (auto iter=l.sprites.begin(); iter!=l.sprites.end(); ++iter)
         {
-            iter->pos=pos;
-            iter->size=size;
-            iter->color=color;
-            iter->texture=texture;
-            iter->valid=true;
-            return makeSprite(iter);
+            if (iter->valid == false)
+            {
+                iter->pos=pos;
+                iter->size=size;
+                iter->color=color;
+                iter->texture=texture;
+                iter->valid=true;
+                return makeSprite(iter);
+            }
         }
     }
     throw runtime_error("out of sprites");
 }
 
-void SpriteManager::drawSprites(const vk::CommandBuffer& buffer) const
+void SpriteManager::drawAllLayers(const vk::CommandBuffer& buffer) const
 {
     buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
-    buffer.pushConstants<glm::mat4>(pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, transformation);
-    for (auto&& s : sprites)
+    for (const auto& l : layers)
+    {
+        buffer.pushConstants<glm::mat4>(pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, l.transformation);
+        for (auto&& s : l.sprites)
+        {
+            if (!s.valid) continue;
+
+            buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, *descriptors[s.texture], {});
+
+            buffer.pushConstants<SpritePushData>(pipelineLayout, vk::ShaderStageFlagBits::eVertex, sizeof(glm::mat4), s);
+            buffer.draw(4,1,0,0);
+        }
+    }
+}
+
+void SpriteManager::drawLayer(size_t layer, const vk::CommandBuffer& buffer) const
+{
+    buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
+    const auto& l =layers[layer];
+    buffer.pushConstants<glm::mat4>(pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, l.transformation);
+    for (auto&& s : l.sprites)
     {
         if (!s.valid) continue;
 
         buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, *descriptors[s.texture], {});
 
-        buffer.pushConstants<SpritePushData>(pipelineLayout, vk::ShaderStageFlagBits::eVertex, sizeof(transformation), s);
+        buffer.pushConstants<SpritePushData>(pipelineLayout, vk::ShaderStageFlagBits::eVertex, sizeof(glm::mat4), s);
         buffer.draw(4,1,0,0);
     }
 }
+

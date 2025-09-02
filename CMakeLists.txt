@@ -56,6 +56,7 @@ add_executable (breakout
     swapchainmanager.cpp
     vulkan.cpp
     spritemanager.cpp
+    particlesystem.cpp
     pipelinebuilder.cpp
     stb.cpp
     vma.cpp
@@ -75,4 +76,5 @@ target_link_libraries (breakout
 
 add_slang_shader(slang SOURCES shader.slang)
 add_slang_shader(sprites SOURCES sprites.slang)
+add_slang_shader(particles SOURCES particles.slang)
 add_dependencies(breakout shaders)

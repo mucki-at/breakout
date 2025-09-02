@@ -75,23 +75,32 @@ private:
     };
 
 public:
-    SpriteManager(size_t maxSprites, size_t maxTextures=256);
+    struct Layer
+    {
+        Container sprites;
+        glm::mat4 transformation = glm::mat4(1.0f);
+    };
+
+public:
+    SpriteManager(size_t layers=1, size_t maxSpritesPerLayer=1024, size_t maxTextures=256);
 
 //    Texture recreateTexture(const string& name, const filesystem::path& filename);
     Texture getOrCreateTexture(const string& name, const filesystem::path& filename);
 //    void releaseTexture(const string& name);
 
     Sprite createSprite(
+        size_t layer,
         glm::vec2 pos,
         Texture texture,
         glm::vec2 size = Automatic,
         glm::vec4 color = { 1.0f, 1.0f, 1.0f, 1.0f }
     );
 
-    void drawSprites(const vk::CommandBuffer& buffer) const;
+    void drawAllLayers(const vk::CommandBuffer& buffer) const;
+    void drawLayer(size_t layer, const vk::CommandBuffer& buffer) const;
 
-    glm::mat4 transformation;
-
+    inline void setLayerTransform(size_t layer, const glm::mat4& transform) { layers[layer].transformation = transform; }
+    
 private:
     vk::raii::PipelineLayout pipelineLayout;
     vk::raii::Pipeline pipeline;
@@ -99,7 +108,7 @@ private:
     vk::raii::DescriptorPool descriptorPool;
     vk::raii::DescriptorSets descriptors;
     
-    Container sprites;
+    vector<Layer> layers;
     map<string, TextureEntry> textures;
     vector<Texture> freeTextureIds;
 

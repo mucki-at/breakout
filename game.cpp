@@ -4,6 +4,10 @@
 #include "game.h"
 #include "vulkan.h"
 #include <glm/ext/matrix_clip_space.hpp>
+#include <glm/gtc/random.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/matrix_transform_2d.hpp>
+
 #include <SDL3/SDL_scancode.h>
 
 //! @brief constructor
@@ -11,7 +15,10 @@ Game::Game(const filesystem::path& levels, glm::vec2 fieldSize) :
     state(Active),
     keys(),
     fieldSize(fieldSize),
-    sprites(1024, 16)
+    sprites(3, 1024, 16),
+    trail(ceil(TrailEmitsPerSecond*TrailDuration)+1, "textures/circle.png"),
+    brickParts(128,  "textures/fragment.png"),
+    nextTrailEmit(0.0f)
 {
     for (auto const& dir_entry : std::filesystem::directory_iterator{levels})
     {
@@ -22,26 +29,28 @@ Game::Game(const filesystem::path& levels, glm::vec2 fieldSize) :
     curLevel=levelList.end();
 
     auto bg=sprites.getOrCreateTexture("background", "textures/background.jpg");
-    background=sprites.createSprite(fieldSize*0.5f, bg, fieldSize);
+    background=sprites.createSprite(BackgroundLayer, fieldSize*0.5f, bg, fieldSize);
     player=sprites.createSprite(
+        GameLayer,
         {}, // position will be set up when level is initialied
-        sprites.getOrCreateTexture("paddle","textures/out.png"),
+        sprites.getOrCreateTexture("paddle","textures/paddle.png"),
         InitialPlayerSize
     );
 
     ball.radius = InitialBallSize;
     ball.sprite = sprites.createSprite(
+        GameLayer,
         {}, // position is reset when level starts
         sprites.getOrCreateTexture("ball", "textures/awesomeface.png"),
         { ball.radius*2.2f, ball.radius*2.2f }
     );
+
     nextLevel();
 
     go=audioManager.loadWav("sounds/go.wav");
     dink=audioManager.loadWav("sounds/dink.wav");
     solid=audioManager.loadWav("sounds/solid.wav");
     lost=audioManager.loadWav("sounds/lost.wav");
-
 }
 
 Game::~Game()
@@ -67,14 +76,37 @@ void Game::updateScreenSize()
     }
     glm::vec2 offset=(viewport-fieldSize)*0.5f;
 
-    sprites.transformation=glm::orthoRH_ZO(
+    auto ortho=glm::orthoRH_ZO(
         -offset.x, viewport.x-offset.x,
         -offset.y, viewport.y-offset.y,
         0.0f, 1.0f);
+    sprites.setLayerTransform(BackgroundLayer, ortho);
+    sprites.setLayerTransform(GameLayer, ortho);
+    sprites.setLayerTransform(ForegroundLayer, ortho);
+    trail.setTransformation(ortho);
+    brickParts.setTransformation(ortho);
 }
 
 void Game::update(float dt)
 {
+    float decay=powf(1.0f-TrailDecayPerSecond,dt);
+
+    trail.update(dt, [dt,decay](auto& p) {
+        p.move(p.velocity*dt);
+        p.rotate(p.angularVelocity*dt);
+        p.velocity*=decay;
+        p.angularVelocity*=decay;
+        p.color.a*=decay;
+    });
+
+    brickParts.update(dt, [dt,decay](auto& p) {
+        p.move(p.velocity*dt);
+        p.rotate(p.angularVelocity*dt);
+        p.velocity.y+=dt*1000.0f;
+        p.color.a*=decay;
+    });
+
+
     if (level->isComplete()) nextLevel();
 
     if (ball.stuck)
@@ -86,6 +118,23 @@ void Game::update(float dt)
     {
         // move ball 
         auto& bp=ball.sprite->pos;
+
+        nextTrailEmit+=TrailEmitsPerSecond*dt;
+        while (nextTrailEmit>1.0f)
+        {
+            auto ofs=glm::linearRand(-TrailPosVar, TrailPosVar);
+            trail.spawnParticleP(
+                TrailDuration,
+                TrailColor,
+                bp+ofs,
+                glm::linearRand(TrailSizeMin, TrailSizeMax),
+                glm::linearRand(0.0f, float(M_PI)*0.5f),
+                ofs*20.0f,
+                glm::linearRand(-float(M_PI),float(M_PI))*3.0f
+            );
+            nextTrailEmit-=1.0f;
+        }
+
         bp += ball.velocity * dt;
 
         // bounce off of walls
@@ -104,6 +153,8 @@ void Game::update(float dt)
         auto [block, closest]=level->getBallCollision(bp, ball.radius);
         if (block)
         {
+            explodeBrick(block->color, block->pos, block->size, closest, glm::length(ball.velocity));
+
             glm::vec2 impactDirection = closest-ball.sprite->pos;
             // TODO: handle corners better
             if (fabs(impactDirection.x) > fabs(impactDirection.y))  // reflect horizontally
@@ -170,7 +221,11 @@ void Game::processInput(float dt)
 
 void Game::draw(const vk::CommandBuffer& commandBuffer) const
 {
-    sprites.drawSprites(commandBuffer);
+    sprites.drawLayer(BackgroundLayer, commandBuffer);
+    trail.draw(commandBuffer);
+    sprites.drawLayer(GameLayer, commandBuffer);
+    brickParts.draw(commandBuffer);
+    sprites.drawLayer(ForegroundLayer, commandBuffer);
 }
 
 void Game::reflectBall(bool horizontal, float limit)
@@ -195,7 +250,7 @@ void Game::nextLevel()
     else ++curLevel;
     if (curLevel==levelList.end()) curLevel=levelList.begin();
 
-    level=make_unique<Level>(*curLevel, glm::vec2{ fieldSize.x, fieldSize.y/2 }, sprites);
+    level=make_unique<Level>(*curLevel, glm::vec2{ fieldSize.x, fieldSize.y/2 }, sprites, GameLayer);
     resetPlayer();
 }
 
@@ -204,4 +259,32 @@ void Game::resetPlayer()
     player->pos={fieldSize.x*0.5f, fieldSize.y-player->size.y};
     ball.stuck=true;
     ball.velocity=InitialBallVelocity;
+}
+
+void Game::explodeBrick(
+    const glm::vec4& color,
+    const glm::vec2& brickPos,
+    const glm::vec2& brickSize,
+    const glm::vec2& hitPoint,
+    float velocity
+)
+{
+    for (float y=-0.25f; y<0.5f; y+=0.5f)
+    {
+        for (float x=-0.375f; x<0.5f; x+=0.25f)
+        {
+            auto center=brickPos+glm::vec2{x,y}*brickSize;
+            auto dir=glm::normalize(center-hitPoint);
+            brickParts.spawnParticleP(
+                1.0f,
+                color,
+                center,
+                glm::vec2{brickSize.x*0.25f, brickSize.y*0.5f},
+                glm::linearRand(0.0f, float(M_PI)*2.0f),
+                dir*velocity,
+                glm::linearRand(-float(M_PI),float(M_PI))*5.0f
+            );
+
+        }
+    }
 }

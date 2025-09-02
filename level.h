@@ -9,7 +9,7 @@
 class Level
 {
 public:
-    Level(const filesystem::path& file, glm::vec2 size, SpriteManager& sprites);
+    Level(const filesystem::path& file, glm::vec2 size, SpriteManager& sprites, size_t layer);
 
     bool isComplete();
 
