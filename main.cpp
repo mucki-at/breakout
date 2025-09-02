@@ -117,6 +117,7 @@ try {
 
             case SDL_EVENT_KEY_DOWN:
                 breakout->setKey(event.key.scancode, true);
+                if (event.key.scancode==SDL_SCANCODE_ESCAPE) done=true;
                 break;
 
             case SDL_EVENT_KEY_UP:
