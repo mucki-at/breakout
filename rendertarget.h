@@ -18,9 +18,35 @@ public:
     inline const auto& getDescription() const noexcept { return description; }
 
 protected:
+    void createImages(
+        const ImageDescription& description,
+        vk::ImageUsageFlags usage,
+        size_t imageCount
+    );
+
+    void cycle();
+
     ImageDescription description;
     vk::ImageUsageFlags usage;
-    vk::SampleCountFlagBits samples;
     vector<DeviceImage> images;
     vector<DeviceImage>::iterator current;
+};
+
+class MultisampleRenderTarget : public RenderTarget
+{
+public:
+    MultisampleRenderTarget();
+
+    void beginRenderTo(const vk::CommandBuffer& commandBuffer, const vk::ClearValue& clear);
+
+protected:
+    void createImages(
+        const ImageDescription& description,
+        vk::ImageUsageFlags usage,
+        vk::SampleCountFlagBits samples,
+        size_t imageCount
+    );
+
+    vk::SampleCountFlagBits samples;
+    vector<DeviceImage> msImages;
 };

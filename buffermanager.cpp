@@ -274,7 +274,7 @@ void BufferManager::upload(DeviceImage& image, const vk::BufferImageCopy& region
 
     image.discardAndTransition(copy, vk::PipelineStageFlagBits2::eTransfer, vk::AccessFlagBits2::eTransferWrite, vk::ImageLayout::eTransferDstOptimal);
     copy.copyBufferToImage(stagingBuffer, image, vk::ImageLayout::eTransferDstOptimal, region);
-    image.transition(copy, vk::PipelineStageFlagBits2::eFragmentShader, vk::AccessFlagBits2::eShaderRead, vk::ImageLayout::eShaderReadOnlyOptimal);
+    image.transition(copy, vk::PipelineStageFlagBits2::eFragmentShader, vk::AccessFlagBits2::eShaderSampledRead, vk::ImageLayout::eShaderReadOnlyOptimal);
     copy.end();
     auto submitInfo=vk::SubmitInfo{
         .commandBufferCount=1,

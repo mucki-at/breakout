@@ -43,6 +43,8 @@ SpriteManager::SpriteManager(
     builder.inputAssembly.topology = vk::PrimitiveTopology::eTriangleStrip;
     builder.shaders.push_back({ .stage=vk::ShaderStageFlagBits::eFragment, .module=shaderModule, .pName="fragMain"});
 
+    builder.multisample.rasterizationSamples = vk::SampleCountFlagBits::e4;
+
     builder.addColorAttachment(
         vulkan.getSwapChainFormat().format,
         vk::PipelineColorBlendAttachmentState{

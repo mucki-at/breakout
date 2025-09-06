@@ -2,56 +2,44 @@
 //!@copyright Copyright (c) 2025
 //! please see LICENSE file in root folder for licensing terms.
 
-#include "particlesystem.h"
+#include "postprocess.h"
 #include "pipelinebuilder.h"
 #include "vulkan.h"
 #include "vkutils.h"
-#include "glm/gtc/matrix_transform.hpp"
 
-namespace detail
-{
-
-ParticleSystemBase::ParticleSystemBase(
-    const filesystem::path& texture
-) :
+PostProcess::PostProcess() :
     pipelineLayout(nullptr),
     pipeline(nullptr),
+    sampler(nullptr),
     descriptorLayout(nullptr),
     descriptorPool(nullptr),
     descriptors(nullptr),
-    image(createImageFromFile(texture, vulkan.getBufferManager())),
-    sampler(createSampler(vulkan.getPhysicalDevice(), vulkan.getDevice())),
-    transformation(1.0f)
+    currentDescriptor(0)
 {
     DescriptorSetBuilder descBuilder;
     descBuilder.bindings.emplace_back(0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment);
-    tie(descriptorLayout, descriptorPool, descriptors)=descBuilder.buildLayoutAndSets(vulkan.getDevice(), 1);
+    tie(descriptorLayout, descriptorPool, descriptors)=descBuilder.buildLayoutAndSets(vulkan.getDevice(), 2);
 
     PipelineLayoutBuilder layoutBuilder;
     layoutBuilder.descriptorSets.push_back(descriptorLayout);
-    layoutBuilder.pushConstants.emplace_back(vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4)+sizeof(ParticlePushData));
     pipelineLayout=layoutBuilder.build(vulkan.getDevice());
 
     PipelineBuilder builder;
-    auto shaderModule=loadShaderModule(vulkan.getDevice(), "shaders/particles.spv");        
+    auto shaderModule=loadShaderModule(vulkan.getDevice(), "shaders/postprocess.spv");        
     builder.shaders.push_back({ .stage=vk::ShaderStageFlagBits::eVertex, .module=shaderModule, .pName="vertMain"});
     builder.inputAssembly.topology = vk::PrimitiveTopology::eTriangleStrip;
     builder.shaders.push_back({ .stage=vk::ShaderStageFlagBits::eFragment, .module=shaderModule, .pName="fragMain"});
 
-    builder.multisample.rasterizationSamples = vk::SampleCountFlagBits::e4;
-
     builder.addColorAttachment(
-        vulkan.getSwapChainFormat().format,
-        vk::PipelineColorBlendAttachmentState{
-            .blendEnable = true,
-            .colorBlendOp = vk::BlendOp::eAdd,
-            .srcColorBlendFactor = vk::BlendFactor::eSrcAlpha,
-            .dstColorBlendFactor = vk::BlendFactor::eOne,
-            .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB
-        }
+        vulkan.getSwapChainFormat().format
     );
     pipeline = builder.build(vulkan.getDevice(),pipelineLayout);
 
+    sampler = createSampler(vulkan.getPhysicalDevice(), vulkan.getDevice());
+}
+
+void PostProcess::draw(const vk::CommandBuffer& commandBuffer, const vk::ImageView image)
+{
     auto imageInfo = vk::DescriptorImageInfo
     {
         .sampler = sampler,
@@ -61,7 +49,7 @@ ParticleSystemBase::ParticleSystemBase(
 
     std::array descriptorWrites{
         vk::WriteDescriptorSet{
-            .dstSet=descriptors[0],
+            .dstSet=descriptors[currentDescriptor],
             .dstBinding=0,
             .descriptorCount=1,
             .descriptorType=vk::DescriptorType::eCombinedImageSampler,
@@ -69,6 +57,9 @@ ParticleSystemBase::ParticleSystemBase(
         }
     };
     vulkan.getDevice().updateDescriptorSets(descriptorWrites, {});
-}
+    commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
+    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, *descriptors[currentDescriptor], {});
+    commandBuffer.draw(4,1,0,0);
 
-} // end namespace detail
+    currentDescriptor = (currentDescriptor+1) % descriptors.size();
+}

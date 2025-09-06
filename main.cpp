@@ -10,10 +10,9 @@
 #include "vkutils.h"
 #include "buffermanager.h"
 #include "swapchain.h"
-#include "dynamicresource.h"
+#include "imagerendertarget.h"
+#include "postprocess.h"
 #include "game.h"
-#include "spritemanager.h"
-#include "texture.h"
 #include <glm/glm.hpp>
 
 #include <SDL3/SDL.h>
@@ -73,7 +72,10 @@ try {
     );
 
     auto swapChain=make_unique<SwapChain>(2);
+    auto images=make_unique<ImageRenderTarget>();
     swapChain->reset();
+    images->reset(swapChain->getDescription(), 2);
+    auto postprocess=make_unique<PostProcess>();
 
     // Step 2: initialize Game
     auto breakout = make_unique<Game>("levels",LogicalSize);
@@ -92,6 +94,7 @@ try {
         {
             // we need a reset
             swapChain->reset();
+            images->reset(swapChain->getDescription(), 2);
             breakout->updateScreenSize(swapChain->getDescription().extent);
             continue;
         }
@@ -103,6 +106,7 @@ try {
             {
             case SDL_EVENT_WINDOW_RESIZED:
                 swapChain->reset();
+                images->reset(swapChain->getDescription(), 2);
                 breakout->updateScreenSize(swapChain->getDescription().extent);
                 restartLoop=true;
                 break;
@@ -159,16 +163,27 @@ try {
         breakout->processInput(deltaTime.count());
         breakout->update(deltaTime.count());
         
-        // Step 3.3: render frame
+        // Step 3.3: render frame 
         auto& commandBuffer = swapChain->beginFrame();
-        
-        swapChain->beginRenderTo(commandBuffer, vk::ClearColorValue(0.0f, 0.0f, 0.05f, 1.0f));
-        breakout->draw(commandBuffer);
-        swapChain->endRenderTo(commandBuffer);
 
+        // Step 3.1.1: draw frame into image buffer
+        images->beginRenderTo(commandBuffer, vk::ClearColorValue(0.0f, 0.0f, 0.05f, 1.0f));
+        breakout->draw(commandBuffer);
+        images->endRenderTo(commandBuffer);
+        images->getCurrent().transition(commandBuffer, vk::PipelineStageFlagBits2::eFragmentShader, vk::AccessFlagBits2::eShaderSampledRead, vk::ImageLayout::eShaderReadOnlyOptimal);
+
+
+        // step 3.1.2: draw image buffer into frame buffer using effects
+        swapChain->beginRenderTo(commandBuffer, vk::ClearColorValue(0.5f, 0.0f, 0.0f, 1.0f));
+        postprocess->draw(commandBuffer, images->getCurrent());
+        swapChain->endRenderTo(commandBuffer);
+        images->cycle();
+
+        // Step 3.4: present frame to screen
         if (swapChain->endFrame(commandBuffer))
         {
             swapChain->reset();
+            images->reset(swapChain->getDescription(), 2);
             breakout->updateScreenSize(swapChain->getDescription().extent);
         }
     }
@@ -176,6 +191,8 @@ try {
     vulkan.getDevice().waitIdle();
 
     breakout=nullptr;
+    postprocess=nullptr;
+    images=nullptr;
     swapChain=nullptr;
     
     vulkan.cleanup();
