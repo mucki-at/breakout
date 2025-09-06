@@ -34,6 +34,7 @@ createSwapChain(
     const vk::raii::PhysicalDevice& physicalDevice,
     const vk::raii::Device& device,
     const vk::raii::SurfaceKHR& surface,
+    const vk::SurfaceFormatKHR& format,
     const SwapChainRequirements& requirements={}
 );
 

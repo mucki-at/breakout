@@ -53,7 +53,8 @@ add_executable (breakout
     level.cpp
     vkutils.cpp
     buffermanager.cpp
-    swapchainmanager.cpp
+    rendertarget.cpp
+    swapchain.cpp
     vulkan.cpp
     spritemanager.cpp
     particlesystem.cpp

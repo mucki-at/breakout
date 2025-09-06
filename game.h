@@ -62,7 +62,7 @@ public:
     ~Game();
 
     // game loop
-    void updateScreenSize();
+    void updateScreenSize(const vk::Extent2D& extent);
     void processInput(float dt);
     void update(float dt);
     void draw(const vk::CommandBuffer& commandBuffer) const;

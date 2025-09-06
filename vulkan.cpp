@@ -27,9 +27,6 @@ Vulkan::Vulkan() :
 
 void Vulkan::cleanup()
 {
-    if (swapChain) swapChain->cleanup();
-    swapChain = nullptr;
-
     bufferManager = nullptr;
     vmaAllocator.reset();
     presentQueue=nullptr;
@@ -120,18 +117,21 @@ void Vulkan::initializeDeviceInternal
     
     bufferManager = make_unique<BufferManager>(*vmaAllocator, device, graphicsQueue, graphicsQueueIndex);
 
-    swapChain = make_unique<SwapChainManager>(
-        device,
-        graphicsQueue,
-        presentQueue,
-        graphicsQueueIndex,
-        2
-    );
-    swapChain->reset(physicalDevice, surface);
-    viewport=vk::Viewport(0.0f, 0.0f, static_cast<float>(swapChain->getExtent().width), static_cast<float>(swapChain->getExtent().height), 0.0f, 1.0f);
-    renderArea=vk::Rect2D(vk::Offset2D(0, 0), swapChain->getExtent());
+    //! pick a color format for our swap chain
+    auto availableFormats=physicalDevice.getSurfaceFormatsKHR(surface);
+    for (const auto& availableFormat : availableFormats) {
+        if (availableFormat.format == vk::Format::eB8G8R8A8Srgb && availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
+            swapChainFormat=availableFormat;
+            break;
+        }
+    }
+    if (swapChainFormat.format==vk::Format::eUndefined)
+    {
+        swapChainFormat=availableFormats[0];
+    }
 }
 
+#if 0
 bool Vulkan::waitForNextFrame()
 {
     if (swapChain->waitForNextFrame())
@@ -149,32 +149,13 @@ bool Vulkan::waitForNextFrame()
 vk::raii::CommandBuffer& Vulkan::beginFrame(const vk::ClearValue& clear)
 {
     auto& commandBuffer = swapChain->beginFrame();
-//    vk::ClearValue clearColor = ;
-    auto attachmentInfo = vk::RenderingAttachmentInfo{
-        .imageView = swapChain->getCurrentView(),
-        .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-        .loadOp = vk::AttachmentLoadOp::eClear,
-        .storeOp = vk::AttachmentStoreOp::eStore,
-        .clearValue = clear
-    };
-
-    auto renderingInfo = vk::RenderingInfo{
-        .renderArea = renderArea,
-        .layerCount = 1,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &attachmentInfo
-    };
-
-    commandBuffer.beginRendering(renderingInfo);
-    commandBuffer.setViewport(0, viewport);
-    commandBuffer.setScissor(0, renderArea);
-
+    swapChain->beginRenderTo(commandBuffer, clear);
     return commandBuffer;
 }
 
 bool Vulkan::endFrame(vk::raii::CommandBuffer& buffer)
 {
-    buffer.endRendering();
+    swapChain->endRenderTo(buffer);
 
     if (swapChain->endFrame())
     {
@@ -188,4 +169,4 @@ bool Vulkan::endFrame(vk::raii::CommandBuffer& buffer)
     return false;
  
 }
-
+#endif

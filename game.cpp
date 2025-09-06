@@ -56,9 +56,9 @@ Game::Game(const filesystem::path& levels, glm::vec2 fieldSize) :
 Game::~Game()
 {}
 
-void Game::updateScreenSize()
+void Game::updateScreenSize(const vk::Extent2D& extent)
 {
-    glm::vec2 screen={vulkan.getViewport().width, vulkan.getViewport().height};
+    glm::vec2 screen={extent.width, extent.height};
 
     float fieldAspect=fieldSize.x/fieldSize.y;
     float screenAspect=screen.x/screen.y;

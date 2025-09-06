@@ -5,6 +5,7 @@
 #include "particlesystem.h"
 #include "pipelinebuilder.h"
 #include "vulkan.h"
+#include "vkutils.h"
 #include "glm/gtc/matrix_transform.hpp"
 
 namespace detail
@@ -38,7 +39,7 @@ ParticleSystemBase::ParticleSystemBase(
     builder.shaders.push_back({ .stage=vk::ShaderStageFlagBits::eFragment, .module=shaderModule, .pName="fragMain"});
 
     builder.addColorAttachment(
-        vulkan.getSwapChain().getFormat(),
+        vulkan.getSwapChainFormat().format,
         vk::PipelineColorBlendAttachmentState{
             .blendEnable = true,
             .colorBlendOp = vk::BlendOp::eAdd,

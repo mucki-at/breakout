@@ -9,8 +9,7 @@
 
 #include "vkutils.h"
 #include "buffermanager.h"
-#include "swapchainmanager.h"
-#include "pipeline.h"
+#include "swapchain.h"
 #include "dynamicresource.h"
 #include "game.h"
 #include "spritemanager.h"
@@ -73,10 +72,12 @@ try {
         vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT{.extendedDynamicState = true }   // Enable extended dynamic state from the extension}
     );
 
+    auto swapChain=make_unique<SwapChain>(2);
+    swapChain->reset();
 
-   // Step 2: initialize Game
+    // Step 2: initialize Game
     auto breakout = make_unique<Game>("levels",LogicalSize);
-    breakout->updateScreenSize();
+    breakout->updateScreenSize(swapChain->getDescription().extent);
 
     // Step 3: Run game loop
     auto lastFrame=GameClock::now();
@@ -86,12 +87,24 @@ try {
 
     while (!done)
     {
+        // Step 3.1: wait until we are ready for next frame (present has finished)
+        if (swapChain->waitForNextFrame())
+        {
+            // we need a reset
+            swapChain->reset();
+            breakout->updateScreenSize(swapChain->getDescription().extent);
+            continue;
+        }
+
+        bool restartLoop=false;
         while (SDL_PollEvent(&event))
         {
             switch (event.type)
             {
             case SDL_EVENT_WINDOW_RESIZED:
-                breakout->updateScreenSize();
+                swapChain->reset();
+                breakout->updateScreenSize(swapChain->getDescription().extent);
+                restartLoop=true;
                 break;
 
             case SDL_EVENT_QUIT:
@@ -127,18 +140,14 @@ try {
             }
         }
 
+        if (restartLoop)
+        {
+            continue;
+        }
+        
         if (paused)
         {
             SDL_WaitEventTimeout(nullptr, 250);
-            continue;
-        }
-
-
-        // Step 3.1: wait until we are ready for next frame (present has finished)
-        if (vulkan.waitForNextFrame())
-        {
-            // we need a reset
-            breakout->updateScreenSize();
             continue;
         }
 
@@ -151,20 +160,24 @@ try {
         breakout->update(deltaTime.count());
         
         // Step 3.3: render frame
-        auto& commandBuffer = vulkan.beginFrame(vk::ClearColorValue(0.0f, 0.0f, 0.05f, 1.0f));
-
+        auto& commandBuffer = swapChain->beginFrame();
+        
+        swapChain->beginRenderTo(commandBuffer, vk::ClearColorValue(0.0f, 0.0f, 0.05f, 1.0f));
         breakout->draw(commandBuffer);
+        swapChain->endRenderTo(commandBuffer);
 
-        if (vulkan.endFrame(commandBuffer))
+        if (swapChain->endFrame(commandBuffer))
         {
-            breakout->updateScreenSize();
+            swapChain->reset();
+            breakout->updateScreenSize(swapChain->getDescription().extent);
         }
     }
 
     vulkan.getDevice().waitIdle();
 
     breakout=nullptr;
-
+    swapChain=nullptr;
+    
     vulkan.cleanup();
  
     // Step 4: cleanup SDL (vulkan uses RAII and doesn't need cleanup code)
