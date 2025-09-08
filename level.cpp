@@ -65,7 +65,7 @@ Level::Level(const filesystem::path& path, glm::vec2 size, SpriteManager& sprite
     }  
 }
 
-pair<SpriteManager::Sprite, glm::vec2> Level::getBallCollision(const glm::vec2& pos, float radius)
+tuple<SpriteManager::Sprite, glm::vec2, bool> Level::getBallCollision(const glm::vec2& pos, float radius)
 {
     for (auto&& b : bricks)
     {
@@ -80,11 +80,11 @@ pair<SpriteManager::Sprite, glm::vec2> Level::getBallCollision(const glm::vec2& 
             {
                 auto result=b.sprite;
                 if (!b.solid) b.sprite=nullptr; // destroy block
-                return tie(result, closest);
+                return tie(result, closest, b.solid);
             }
         }
     }
-    return make_pair(SpriteManager::Sprite{}, glm::vec2{});
+    return make_tuple(SpriteManager::Sprite{}, glm::vec2{}, false);
 }
 
 bool Level::isComplete()

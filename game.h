@@ -8,6 +8,7 @@
 #include "level.h"
 #include "audiomanager.h"
 #include "particlesystem.h"
+#include "postprocess.h"
 
 //! @brief Game holds all game-related state and functionality.
 //! Combines all game-related data into a single class for
@@ -64,7 +65,7 @@ public:
     // game loop
     void updateScreenSize(const vk::Extent2D& extent);
     void processInput(float dt);
-    void update(float dt);
+    void update(float dt, PostProcess& post);
     void draw(const vk::CommandBuffer& commandBuffer) const;
 
     inline void setKey(size_t key, bool pressed)
@@ -104,5 +105,5 @@ private:
     void nextLevel();
 
     AudioManager audioManager;
-    AudioManager::Audio go,dink,solid,lost;
+    AudioManager::Audio brick[3],go,lost,paddle[2],solid,wall[3];
 };

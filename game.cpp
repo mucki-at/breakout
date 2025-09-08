@@ -47,10 +47,17 @@ Game::Game(const filesystem::path& levels, glm::vec2 fieldSize) :
 
     nextLevel();
 
+    brick[0]=audioManager.loadWav("sounds/brick0.wav"),
+    brick[1]=audioManager.loadWav("sounds/brick1.wav"),
+    brick[2]=audioManager.loadWav("sounds/brick2.wav"),
     go=audioManager.loadWav("sounds/go.wav");
-    dink=audioManager.loadWav("sounds/dink.wav");
-    solid=audioManager.loadWav("sounds/solid.wav");
     lost=audioManager.loadWav("sounds/lost.wav");
+    paddle[0]=audioManager.loadWav("sounds/paddle0.wav");
+    paddle[1]=audioManager.loadWav("sounds/paddle1.wav");
+    solid=audioManager.loadWav("sounds/solid.wav");
+    wall[0]=audioManager.loadWav("sounds/wall0.wav");
+    wall[1]=audioManager.loadWav("sounds/wall1.wav");
+    wall[2]=audioManager.loadWav("sounds/wall2.wav");
 }
 
 Game::~Game()
@@ -87,7 +94,7 @@ void Game::updateScreenSize(const vk::Extent2D& extent)
     brickParts.setTransformation(ortho);
 }
 
-void Game::update(float dt)
+void Game::update(float dt, PostProcess& post)
 {
     float decay=powf(1.0f-TrailDecayPerSecond,dt);
 
@@ -138,10 +145,22 @@ void Game::update(float dt)
         bp += ball.velocity * dt;
 
         // bounce off of walls
-        if (bp.x <= ball.radius) reflectBall(true, ball.radius);
-        else if (bp.x >= fieldSize.x-ball.radius) reflectBall(true, fieldSize.x-ball.radius);
+        if (bp.x <= ball.radius)
+        {
+            wall[rand()%3]->play();
+            reflectBall(true, ball.radius);
+        }
+        else if (bp.x >= fieldSize.x-ball.radius)
+        {
+            wall[rand()%3]->play();
+            reflectBall(true, fieldSize.x-ball.radius);
+        }
 
-        if (bp.y <= ball.radius) reflectBall(false, ball.radius);
+        if (bp.y <= ball.radius)
+        {
+            wall[rand()%3]->play();
+            reflectBall(false, ball.radius);
+        }
         else if (bp.y >= fieldSize.y)
         {
             lost->play();
@@ -150,10 +169,19 @@ void Game::update(float dt)
         }
 
         // check collision with level and reflect accordingly
-        auto [block, closest]=level->getBallCollision(bp, ball.radius);
+        auto [block, closest, isSolid]=level->getBallCollision(bp, ball.radius);
         if (block)
         {
-            explodeBrick(block->color, block->pos, block->size, closest, glm::length(ball.velocity));
+            if (isSolid)
+            {
+                solid->play();
+                post.shake(0.05);
+            }
+            else
+            {
+                brick[rand()%3]->play();
+                explodeBrick(block->color, block->pos, block->size, closest, glm::length(ball.velocity));
+            }
 
             glm::vec2 impactDirection = closest-ball.sprite->pos;
             // TODO: handle corners better
@@ -176,6 +204,7 @@ void Game::update(float dt)
         playerHitPos = glm::clamp(playerHitPos, -halfPlayerSize, halfPlayerSize);   // clamped to player size
         if (glm::length((playerHitPos+player->pos)-bp) < ball.radius) // hit
         {
+            paddle[rand()%2]->play();
             reflectBall(false, player->pos.y-halfPlayerSize.y-ball.radius);
 
             // check where it hit the board, and change velocity based on where it hit the board
@@ -230,8 +259,7 @@ void Game::draw(const vk::CommandBuffer& commandBuffer) const
 
 void Game::reflectBall(bool horizontal, float limit)
 {
-    dink->play();
-    auto& bp=ball.sprite->pos;
+   auto& bp=ball.sprite->pos;
     if (horizontal)
     {
         ball.velocity.x = -ball.velocity.x;

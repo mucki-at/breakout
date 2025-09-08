@@ -14,7 +14,8 @@ PostProcess::PostProcess() :
     descriptorLayout(nullptr),
     descriptorPool(nullptr),
     descriptors(nullptr),
-    currentDescriptor(0)
+    currentDescriptor(0),
+    state(0.0f, 0.0f, 0.0f)
 {
     DescriptorSetBuilder descBuilder;
     descBuilder.bindings.emplace_back(0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment);
@@ -22,6 +23,7 @@ PostProcess::PostProcess() :
 
     PipelineLayoutBuilder layoutBuilder;
     layoutBuilder.descriptorSets.push_back(descriptorLayout);
+    layoutBuilder.pushConstants.push_back(vk::PushConstantRange{.stageFlags=vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(PushData)});
     pipelineLayout=layoutBuilder.build(vulkan.getDevice());
 
     PipelineBuilder builder;
@@ -36,6 +38,13 @@ PostProcess::PostProcess() :
     pipeline = builder.build(vulkan.getDevice(),pipelineLayout);
 
     sampler = createSampler(vulkan.getPhysicalDevice(), vulkan.getDevice());
+}
+
+void PostProcess::update(float dt)
+{
+    state.chaos -= dt;
+    state.confuse -= dt;
+    state.shake -= dt;
 }
 
 void PostProcess::draw(const vk::CommandBuffer& commandBuffer, const vk::ImageView image)
@@ -59,6 +68,9 @@ void PostProcess::draw(const vk::CommandBuffer& commandBuffer, const vk::ImageVi
     vulkan.getDevice().updateDescriptorSets(descriptorWrites, {});
     commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
     commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, *descriptors[currentDescriptor], {});
+
+    commandBuffer.pushConstants<PushData>(pipelineLayout, vk::ShaderStageFlagBits::eAllGraphics, 0, state);
+
     commandBuffer.draw(4,1,0,0);
 
     currentDescriptor = (currentDescriptor+1) % descriptors.size();

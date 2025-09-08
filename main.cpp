@@ -161,7 +161,8 @@ try {
         lastFrame = currentFrame;
 
         breakout->processInput(deltaTime.count());
-        breakout->update(deltaTime.count());
+        breakout->update(deltaTime.count(), *postprocess);
+        postprocess->update(deltaTime.count());
         
         // Step 3.3: render frame 
         auto& commandBuffer = swapChain->beginFrame();

@@ -4,13 +4,17 @@
 #pragma once
 
 #include "common.h"
+#include <glm/glm.hpp>
 
 class PostProcess
 {
 public:
     PostProcess();
 
+    void update(float dt);
     void draw(const vk::CommandBuffer& commandBuffer, const vk::ImageView image);
+
+    inline void shake(float length) { state.shake = length; }
 
 private:
     vk::raii::PipelineLayout pipelineLayout;
@@ -21,4 +25,13 @@ private:
     vk::raii::DescriptorPool descriptorPool;
     vk::raii::DescriptorSets descriptors;
     uint32_t currentDescriptor;
+
+    struct PushData
+    {
+        glm::f32 chaos;
+        glm::f32 confuse;
+        glm::f32 shake;
+    };
+
+    PushData state;
 };
