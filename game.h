@@ -105,5 +105,5 @@ private:
     void nextLevel();
 
     AudioManager audioManager;
-    AudioManager::Audio brick[3],go,lost,paddle[2],solid,wall[3];
+    AudioManager::Audio brick,go,lost,paddle,solid,wall;
 };

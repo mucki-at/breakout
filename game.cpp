@@ -47,17 +47,12 @@ Game::Game(const filesystem::path& levels, glm::vec2 fieldSize) :
 
     nextLevel();
 
-    brick[0]=audioManager.loadWav("sounds/brick0.wav"),
-    brick[1]=audioManager.loadWav("sounds/brick1.wav"),
-    brick[2]=audioManager.loadWav("sounds/brick2.wav"),
+    brick=audioManager.loadWavWithVariations("sounds/brick0.wav","sounds/brick1.wav","sounds/brick2.wav");
     go=audioManager.loadWav("sounds/go.wav");
     lost=audioManager.loadWav("sounds/lost.wav");
-    paddle[0]=audioManager.loadWav("sounds/paddle0.wav");
-    paddle[1]=audioManager.loadWav("sounds/paddle1.wav");
+    paddle=audioManager.loadWavWithVariations("sounds/paddle0.wav","sounds/paddle1.wav");
     solid=audioManager.loadWav("sounds/solid.wav");
-    wall[0]=audioManager.loadWav("sounds/wall0.wav");
-    wall[1]=audioManager.loadWav("sounds/wall1.wav");
-    wall[2]=audioManager.loadWav("sounds/wall2.wav");
+    wall=audioManager.loadWavWithVariations("sounds/wall0.wav","sounds/wall1.wav","sounds/wall2.wav");
 }
 
 Game::~Game()
@@ -147,18 +142,18 @@ void Game::update(float dt, PostProcess& post)
         // bounce off of walls
         if (bp.x <= ball.radius)
         {
-            wall[rand()%3]->play();
+            wall->play();
             reflectBall(true, ball.radius);
         }
         else if (bp.x >= fieldSize.x-ball.radius)
         {
-            wall[rand()%3]->play();
+            wall->play();
             reflectBall(true, fieldSize.x-ball.radius);
         }
 
         if (bp.y <= ball.radius)
         {
-            wall[rand()%3]->play();
+            wall->play();
             reflectBall(false, ball.radius);
         }
         else if (bp.y >= fieldSize.y)
@@ -179,7 +174,7 @@ void Game::update(float dt, PostProcess& post)
             }
             else
             {
-                brick[rand()%3]->play();
+                brick->play();
                 explodeBrick(block->color, block->pos, block->size, closest, glm::length(ball.velocity));
             }
 
@@ -204,7 +199,7 @@ void Game::update(float dt, PostProcess& post)
         playerHitPos = glm::clamp(playerHitPos, -halfPlayerSize, halfPlayerSize);   // clamped to player size
         if (glm::length((playerHitPos+player->pos)-bp) < ball.radius) // hit
         {
-            paddle[rand()%2]->play();
+            paddle->play();
             reflectBall(false, player->pos.y-halfPlayerSize.y-ball.radius);
 
             // check where it hit the board, and change velocity based on where it hit the board

@@ -10,3 +10,8 @@ This project is licensed under the MIT license (see LICENSE file). It uses the f
 * stb (https://github.com/nothings/stb) - public domain
 * glm (https://glm.g-truc.net/) - The Happy Bunny License or MIT License
 * SDL3 (https://wiki.libsdl.org/SDL3/FrontPage) - zlib license
+
+Assets used by the game:
+* thud sounds (https://freesound.org/people/EdgardEdition/packs/7185/) - CC-BY-3.0
+* ball lost (https://freesound.org/people/harrietniamh/packs/23407/) - CC-BY-4.0
+* go sound (??? Found on freesound.org) - ???
