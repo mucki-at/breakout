@@ -52,6 +52,44 @@ private:
 
 }
 
+AudioManager::Variations::Variations() :
+    variations(),
+    current(variations.end())
+{}
+
+void AudioManager::Variations::addVariation(AudioManager::Audio var)
+{
+    stop();
+    variations.push_back(var);
+    current=variations.end();
+}
+
+void AudioManager::Variations::play() noexcept
+{
+    stop();
+
+    if (variations.empty())
+    {
+        current=variations.end();
+        return;
+    }
+    else
+    {
+        current=variations.begin()+rand()%variations.size();
+        (*current)->play();
+    }
+}
+
+void AudioManager::Variations::stop() noexcept
+{
+    if (current!=variations.end())
+    {
+        (*current)->stop();
+        current=variations.end();
+    }
+}
+
+
 AudioManager::AudioManager() :
     device(0)
 {

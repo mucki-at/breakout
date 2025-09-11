@@ -87,23 +87,10 @@ createSwapChain(
     const vk::raii::PhysicalDevice& physicalDevice,
     const vk::raii::Device& device,
     const vk::raii::SurfaceKHR& surface,
+    const vk::SurfaceFormatKHR& format,
     const SwapChainRequirements& requirements
 )
 {
-    //! pick a color format for our swap chain
-    auto availableFormats=physicalDevice.getSurfaceFormatsKHR(surface);
-    vk::SurfaceFormatKHR format={};
-    for (const auto& availableFormat : availableFormats) {
-        if (availableFormat.format == vk::Format::eB8G8R8A8Srgb && availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
-            format=availableFormat;
-            break;
-        }
-    }
-    if (format.format==vk::Format::eUndefined)
-    {
-        format=availableFormats[0];
-    }
-
     //! pick a presentation mode
     vk::PresentModeKHR presentMode=vk::PresentModeKHR::eFifo;
     if (requirements.preferredPresentMode!=vk::PresentModeKHR::eFifo)

@@ -6,7 +6,6 @@
 #include "common.h"
 #include "vma.h"
 #include "buffermanager.h"
-#include "swapchainmanager.h"
 
 #ifdef VULKAN_INCLUDE_GLFW
 #define GLFW_INCLUDE_VULKAN
@@ -127,9 +126,9 @@ public:
     }
 #endif
 
-    bool waitForNextFrame();
-    vk::raii::CommandBuffer& beginFrame(const vk::ClearValue& clear);
-    bool endFrame(vk::raii::CommandBuffer& buffer);
+//    bool waitForNextFrame();
+//    vk::raii::CommandBuffer& beginFrame(const vk::ClearValue& clear);
+//    bool endFrame(vk::raii::CommandBuffer& buffer);
 
 private:
     void initializeDeviceInternal
@@ -151,10 +150,8 @@ public:
 
     inline const vma::UniqueAllocator& getVmaAllocator() const noexcept { return vmaAllocator; }
     inline const BufferManager& getBufferManager() const noexcept { return *bufferManager; }
-    inline const SwapChainManager& getSwapChain() const noexcept { return *swapChain; }
 
-    inline const vk::Rect2D& getRenderArea() const noexcept { return renderArea; }
-    inline const vk::Viewport& getViewport() const noexcept { return viewport; }
+    inline const vk::SurfaceFormatKHR& getSwapChainFormat() const noexcept { return swapChainFormat; }
 
 private:
     vk::raii::Context context;
@@ -170,10 +167,7 @@ private:
     vma::UniqueAllocator vmaAllocator;
     unique_ptr<BufferManager> bufferManager;
 
-    unique_ptr<SwapChainManager> swapChain;
-
-    vk::Rect2D renderArea;
-    vk::Viewport viewport;
+    vk::SurfaceFormatKHR swapChainFormat;
 };
 
 extern Vulkan vulkan;

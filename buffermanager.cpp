@@ -4,6 +4,7 @@
 
 #include "buffermanager.h"
 #include "vkutils.h"
+#include "vulkan.h"
 
 /////// DeviceBuffer
 
@@ -47,27 +48,32 @@ DeviceBuffer::~DeviceBuffer()
 
 /////// DeviceImage
 
+// this constructor is used by buffermanager to allocate new images
 DeviceImage::DeviceImage(
     vma::Allocator allocator,
     vk::Device device,
     const ImageDescription& description,
     vk::ImageUsageFlags usage,
+    vk::SampleCountFlagBits samples,
     const vma::AllocationCreateInfo& allocInfo
     ) :
     description(description),
     allocator(allocator),
     image(nullptr),
     view(nullptr),
-    allocation(nullptr)
+    allocation(nullptr),
+    currentStage(vk::PipelineStageFlagBits2::eNone),
+    currentAccess(vk::AccessFlagBits2::eNone),
+    currentLayout(vk::ImageLayout::eUndefined)
 {
     tie(image, allocation) = allocator.createImage(
         vk::ImageCreateInfo{
             .imageType = vk::ImageType::e2D,
             .format = description.format,
-            .extent = { description.width, description.height, 1 },
+            .extent = { description.extent.width, description.extent.height, 1 },
             .mipLevels = 1,
             .arrayLayers = 1,
-            .samples = vk::SampleCountFlagBits::e1,
+            .samples = samples,
             .tiling = vk::ImageTiling::eOptimal,
             .usage=usage,
             .sharingMode=vk::SharingMode::eExclusive,
@@ -85,13 +91,49 @@ DeviceImage::DeviceImage(
     });
 }
 
+// this constructor is used by SwapChain to hold images and views for the swapchain.
+// the image storage is managed by the vulkan swap chain object, and so we do not
+// need to allocate or free them, but we need to create the view for it
+DeviceImage::DeviceImage(
+    const ImageDescription& description,
+    vk::Image image
+) :
+    description(description),
+    allocator(nullptr),
+    image(image),
+    view(nullptr),
+    allocation(nullptr),
+    currentStage(vk::PipelineStageFlagBits2::eNone),
+    currentAccess(vk::AccessFlagBits2::eNone),
+    currentLayout(vk::ImageLayout::eUndefined)   
+{
+    // we explicitelydo NOT want the raii version here.
+    vk::Device deviceHandle=vulkan.getDevice();
+    view=deviceHandle.createImageView({
+        .viewType = vk::ImageViewType::e2D,
+        .format = description.format,
+        .subresourceRange = {
+            .aspectMask = vk::ImageAspectFlagBits::eColor,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1
+        },
+        .image=image
+    });
+}
+
+
 DeviceImage::DeviceImage(DeviceImage&& rhs) :
     description(exchange(rhs.description, {})),
     allocator(exchange(rhs.allocator, {})),
     image(exchange(rhs.image, {})),
     view(exchange(rhs.view, {})),
     allocation(exchange(rhs.allocation, {})),
-    info(exchange(rhs.info, {}))
+    info(exchange(rhs.info, {})),
+    currentStage(exchange(rhs.currentStage, {})),
+    currentAccess(exchange(rhs.currentAccess, {})),
+    currentLayout(exchange(rhs.currentLayout, {}))
 {
 }
 
@@ -105,9 +147,13 @@ DeviceImage& DeviceImage::operator=(DeviceImage&& rhs)
         swap(view, rhs.view);
         swap(allocation, rhs.allocation);
         swap(info, rhs.info);
+        swap(currentStage, rhs.currentStage);
+        swap(currentAccess, rhs.currentAccess);
+        swap(currentLayout, rhs.currentLayout);
     }
     return *this;
 }
+
 
 DeviceImage::~DeviceImage()
 {
@@ -117,7 +163,57 @@ DeviceImage::~DeviceImage()
         info.device.destroyImageView(view);
         allocator.destroyImage(image, allocation);
     }
+    else
+    {
+        if (view)
+        {
+            vk::Device deviceHandle=vulkan.getDevice();
+            deviceHandle.destroyImageView(view);
+        }
+    }
 }
+
+void DeviceImage::createBarrier(
+    const vk::CommandBuffer& commandBuffer,
+    vk::PipelineStageFlags2 srcStageMask,
+    vk::PipelineStageFlags2 dstStageMask,
+    vk::AccessFlags2 srcAccessMask,
+    vk::AccessFlags2 dstAccessMask,
+    vk::ImageLayout srcLayout,
+    vk::ImageLayout dstLayout
+)
+{
+    auto barrier = vk::ImageMemoryBarrier2
+    {
+        .srcStageMask = srcStageMask,
+        .dstStageMask = dstStageMask,
+        .srcAccessMask = srcAccessMask,
+        .dstAccessMask = dstAccessMask,
+        .oldLayout = srcLayout,
+        .newLayout = dstLayout,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = image,
+        .subresourceRange = {
+            .aspectMask = vk::ImageAspectFlagBits::eColor,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1
+        }
+    };
+    vk::DependencyInfo dependencyInfo = {
+        .dependencyFlags = {},
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &barrier
+    };
+    commandBuffer.pipelineBarrier2(dependencyInfo);
+    currentStage = dstStageMask;
+    currentAccess = dstAccessMask;
+    currentLayout = dstLayout;
+
+}
+
 
 /////// BufferManager
 
@@ -166,7 +262,7 @@ void BufferManager::upload(const vk::Buffer& buffer, const vk::BufferCopy& range
     device.resetFences({fence});
 }
 
-void BufferManager::upload(const vk::Image& image, const vk::BufferImageCopy& region) const
+void BufferManager::upload(DeviceImage& image, const vk::BufferImageCopy& region) const
 {
     auto commands=device.allocateCommandBuffers(vk::CommandBufferAllocateInfo{
         .commandPool = commandPool,
@@ -176,33 +272,9 @@ void BufferManager::upload(const vk::Image& image, const vk::BufferImageCopy& re
     auto& copy=commands.front();
     copy.begin(vk::CommandBufferBeginInfo { .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
 
-    auto barrier = vk::ImageMemoryBarrier
-    {
-        .dstAccessMask = vk::AccessFlagBits::eTransferWrite,
-        .newLayout = vk::ImageLayout::eTransferDstOptimal,
-        .image = image,
-        .subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 }
-    };
-    copy.pipelineBarrier(
-        vk::PipelineStageFlagBits::eTopOfPipe,
-        vk::PipelineStageFlagBits::eTransfer,
-        {},{},{},
-        barrier
-    );
-
+    image.discardAndTransition(copy, vk::PipelineStageFlagBits2::eTransfer, vk::AccessFlagBits2::eTransferWrite, vk::ImageLayout::eTransferDstOptimal);
     copy.copyBufferToImage(stagingBuffer, image, vk::ImageLayout::eTransferDstOptimal, region);
-
-    barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-    barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-    barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
-    barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-    copy.pipelineBarrier(
-        vk::PipelineStageFlagBits::eTransfer,
-        vk::PipelineStageFlagBits::eFragmentShader,
-        {},{},{},
-        barrier
-    );
-
+    image.transition(copy, vk::PipelineStageFlagBits2::eFragmentShader, vk::AccessFlagBits2::eShaderSampledRead, vk::ImageLayout::eShaderReadOnlyOptimal);
     copy.end();
     auto submitInfo=vk::SubmitInfo{
         .commandBufferCount=1,
@@ -212,7 +284,6 @@ void BufferManager::upload(const vk::Image& image, const vk::BufferImageCopy& re
     if (device.waitForFences({fence}, true, numeric_limits<uint64_t>::max()) != vk::Result::eSuccess)
         throw std::runtime_error("Host to device image transfer timed out");
     device.resetFences({fence});
-  
 }
 
 

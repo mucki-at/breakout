@@ -1,4 +1,5 @@
 .vscode/
 build/
 shaders/
-**/.DS_Store
+.DS_Store
+*.*~

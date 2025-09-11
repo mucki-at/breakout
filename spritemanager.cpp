@@ -5,6 +5,7 @@
 #include "spritemanager.h"
 #include "pipelinebuilder.h"
 #include "vulkan.h"
+#include "vkutils.h"
 
 SpriteManager::SpriteManager(
     size_t layers,
@@ -42,8 +43,10 @@ SpriteManager::SpriteManager(
     builder.inputAssembly.topology = vk::PrimitiveTopology::eTriangleStrip;
     builder.shaders.push_back({ .stage=vk::ShaderStageFlagBits::eFragment, .module=shaderModule, .pName="fragMain"});
 
+    builder.multisample.rasterizationSamples = vk::SampleCountFlagBits::e4;
+
     builder.addColorAttachment(
-        vulkan.getSwapChain().getFormat(),
+        vulkan.getSwapChainFormat().format,
         vk::PipelineColorBlendAttachmentState{
             .blendEnable = true,
             .colorBlendOp = vk::BlendOp::eAdd,
@@ -134,7 +137,7 @@ SpriteManager::Sprite SpriteManager::createSprite(
         auto finder=find_if(textures.begin(), textures.end(), [texture](auto&& e) { return e.second.id==texture; });
         if (finder==textures.end()) throw runtime_error("texture must be registered to use automatic sprite size");
         auto&& desc=finder->second.image.getDescription();
-        size={ desc.width, desc.height };
+        size={ desc.extent.width, desc.extent.height };
     }
     auto& l = layers[layer];
     if (l.sprites.size()<l.sprites.capacity())

@@ -13,7 +13,7 @@ public:
 
     bool isComplete();
 
-    pair<SpriteManager::Sprite,glm::vec2> getBallCollision(const glm::vec2& pos, float radius);
+    tuple<SpriteManager::Sprite,glm::vec2,bool> getBallCollision(const glm::vec2& pos, float radius);
     
 private:
     struct Brick

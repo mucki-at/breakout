@@ -18,15 +18,14 @@
 
     auto desc = ImageDescription
     {
-        .width = static_cast<uint32_t>(width),
-        .height = static_cast<uint32_t>(height),
+        .extent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) },
         .format = vk::Format::eR8G8B8A8Srgb
     };
     auto byteSize = static_cast<vk::DeviceSize>(width) * static_cast<vk::DeviceSize>(height) * 4;
     auto image = bufferManager.createImage(desc, vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst);
     memcpy(bufferManager.getStage(0, byteSize), pixels, byteSize);
     bufferManager.upload(image, vk::BufferImageCopy{
-            .imageExtent = { desc.width, desc.height, 1 },
+            .imageExtent = { desc.extent.width, desc.extent.height, 1 },
             .imageSubresource = { vk::ImageAspectFlagBits::eColor, 0, 0, 1 }
         });
     stbi_image_free(pixels);
