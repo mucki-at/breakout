@@ -30,10 +30,11 @@ Game::Game(const filesystem::path& levels, glm::vec2 fieldSize) :
 
     auto bg=sprites.getOrCreateTexture("background", "textures/background.jpg");
     background=sprites.createSprite(BackgroundLayer, fieldSize*0.5f, bg, fieldSize);
+    defaultPaddle = sprites.getOrCreateTexture("paddle","textures/paddle.png");
     player=sprites.createSprite(
         GameLayer,
         {}, // position will be set up when level is initialied
-        sprites.getOrCreateTexture("paddle","textures/paddle.png"),
+        defaultPaddle,
         InitialPlayerSize
     );
 
@@ -44,6 +45,15 @@ Game::Game(const filesystem::path& levels, glm::vec2 fieldSize) :
         sprites.getOrCreateTexture("ball", "textures/awesomeface.png"),
         { ball.radius*2.2f, ball.radius*2.2f }
     );
+
+    powerupDefinitions.emplace_back(PowerUp::Speed, sprites.getOrCreateTexture("speed", "textures/powerup_speed.png"), 1.0f, 1.0f);
+    powerupDefinitions.emplace_back(PowerUp::Sticky, sprites.getOrCreateTexture("sticky", "textures/powerup_sticky.png"), 1.0f, 1.0f);
+    powerupDefinitions.emplace_back(PowerUp::PassThrough, sprites.getOrCreateTexture("passthrough", "textures/powerup_passthrough.png"), 1.0f, 1.0f);
+    powerupDefinitions.emplace_back(PowerUp::Size, sprites.getOrCreateTexture("increase", "textures/powerup_increase.png"), 1.0f, 1.0f);
+    powerupDefinitions.emplace_back(PowerUp::Confuse, sprites.getOrCreateTexture("confuse", "textures/powerup_confuse.png"), 1.0f, 1.0f);
+    powerupDefinitions.emplace_back(PowerUp::Chaos, sprites.getOrCreateTexture("chaos", "textures/powerup_chaos.png"), 1.0f, 1.0f);
+
+    for (auto&& pd : powerupDefinitions) pd.chance/=10.0f;
 
     nextLevel();
 
@@ -109,107 +119,172 @@ void Game::update(float dt, PostProcess& post)
     });
 
 
+    updatePowerups(dt,post);
+
     if (level->isComplete()) nextLevel();
 
     if (ball.stuck)
     {
         ball.sprite->pos.x=player->pos.x;
-        ball.sprite->pos.y=player->pos.y-player->size.y*0.5f-ball.radius;
+        ball.sprite->pos.y=player->top()-ball.radius;
     }
     else
     {
-        // move ball 
-        auto& bp=ball.sprite->pos;
+        updateBall(dt,post);
+    }
+}
 
-        nextTrailEmit+=TrailEmitsPerSecond*dt;
-        while (nextTrailEmit>1.0f)
+void Game::updateBall(float dt, PostProcess& post)
+{
+    // move ball 
+    auto& bp=ball.sprite->pos;
+
+    nextTrailEmit+=TrailEmitsPerSecond*dt;
+    while (nextTrailEmit>1.0f)
+    {
+        auto ofs=glm::linearRand(-TrailPosVar, TrailPosVar);
+        trail.spawnParticleP(
+            TrailDuration,
+            TrailColor,
+            bp+ofs,
+            glm::linearRand(TrailSizeMin, TrailSizeMax),
+            glm::linearRand(0.0f, float(M_PI)*0.5f),
+            ofs*20.0f,
+            glm::linearRand(-float(M_PI),float(M_PI))*3.0f
+        );
+        nextTrailEmit-=1.0f;
+    }
+
+    bp += ball.velocity * dt;
+
+    // bounce off of walls
+    if (bp.x <= ball.radius)
+    {
+        wall->play();
+        reflectBall(true, ball.radius);
+    }
+    else if (bp.x >= fieldSize.x-ball.radius)
+    {
+        wall->play();
+        reflectBall(true, fieldSize.x-ball.radius);
+    }
+
+    if (bp.y <= ball.radius)
+    {
+        wall->play();
+        reflectBall(false, ball.radius);
+    }
+    else if (bp.y >= fieldSize.y+ball.radius)
+    {
+        lost->play();
+        resetPlayer();
+        return;
+    }
+
+    // check collision with level and reflect accordingly
+    auto [block, closest, isSolid]=level->getBallCollision(bp, ball.radius);
+    if (block)
+    {
+        if (isSolid)
         {
-            auto ofs=glm::linearRand(-TrailPosVar, TrailPosVar);
-            trail.spawnParticleP(
-                TrailDuration,
-                TrailColor,
-                bp+ofs,
-                glm::linearRand(TrailSizeMin, TrailSizeMax),
-                glm::linearRand(0.0f, float(M_PI)*0.5f),
-                ofs*20.0f,
-                glm::linearRand(-float(M_PI),float(M_PI))*3.0f
-            );
-            nextTrailEmit-=1.0f;
+            solid->play();
+            post.shake(0.05);
+        }
+        else
+        {
+            brick->play();
+            explodeBrick(block->color, block->pos, block->size, closest, glm::length(ball.velocity));
+
+            maybeSpawnPowerups(block);
         }
 
-        bp += ball.velocity * dt;
+        glm::vec2 impactDirection = closest-ball.sprite->pos;
+        // TODO: handle corners better
+        if (fabs(impactDirection.x) > fabs(impactDirection.y))  // reflect horizontally
+        {
+            if (impactDirection.x > 0) reflectBall(true, closest.x-ball.radius);
+            else reflectBall(true, closest.x+ball.radius);
+        }
+        else
+        {
+            if (impactDirection.y > 0) reflectBall(false, closest.y-ball.radius);
+            else reflectBall(false, closest.y+ball.radius);
+        }
+    }   
+    
+    // check paddle collision
+    glm::vec2 halfPlayerSize=player->size*0.5f;
+    // find closest point on sprite
+    glm::vec2 playerHitPos=bp-player->pos;    // vector to ball relative to player
+    playerHitPos = glm::clamp(playerHitPos, -halfPlayerSize, halfPlayerSize);   // clamped to player size
+    if (glm::length((playerHitPos+player->pos)-bp) < ball.radius) // hit
+    {
+        paddle->play();
+        reflectBall(false, player->pos.y-halfPlayerSize.y-ball.radius);
 
-        // bounce off of walls
-        if (bp.x <= ball.radius)
-        {
-            wall->play();
-            reflectBall(true, ball.radius);
-        }
-        else if (bp.x >= fieldSize.x-ball.radius)
-        {
-            wall->play();
-            reflectBall(true, fieldSize.x-ball.radius);
-        }
+        // check where it hit the board, and change velocity based on where it hit the board
+        float percentage = playerHitPos.x / halfPlayerSize.x;
+        // then move accordingly
+        float strength = 2.0f;
+        float oldVelocity = glm::length(ball.velocity);
+        ball.velocity.x = InitialBallVelocity.x * percentage * strength; 
+        ball.velocity = glm::normalize(ball.velocity) * oldVelocity;         
+    } 
+}
 
-        if (bp.y <= ball.radius)
+void Game::updatePowerups(float dt, PostProcess& post)
+{
+    for (auto&& p : powerups)
+    {
+        if (p.sprite)
         {
-            wall->play();
-            reflectBall(false, ball.radius);
+            p.sprite->pos.y+=PowerupFallSpeed*dt;
+
+            if (p.sprite->top() > fieldSize.y)  // lost powerup
+            {
+                p.sprite=nullptr;
+                p.timeLeft=0.0f;
+            }
+            else if ((p.sprite->bottom() >= player->top()) &&
+                     (p.sprite->top()<=player->bottom()) &&
+                     (p.sprite->left() <= player->right()) &&
+                     (p.sprite->right() >= player->left()))
+            {
+                // powerup collected
+                player->texture=p.sprite->texture;
+
+
+
+                p.sprite=nullptr;
+            }
         }
-        else if (bp.y >= fieldSize.y)
+        if (p.timeLeft>=0.0f)
         {
-            lost->play();
-            resetPlayer();
+            p.timeLeft-=dt;
+            if (p.timeLeft < 0.0f)
+            {
+                // powerup expired
+                player->texture=defaultPaddle;
+            }
+        }
+    }
+    erase_if(powerups, [](const PowerUp& p) { return p.sprite==nullptr && p.timeLeft<0.0f; });
+}
+
+void Game::maybeSpawnPowerups(const SpriteManager::Sprite& brick)
+{
+    float draw=SDL_randf();
+    for (const auto& pd : powerupDefinitions)
+    {
+        if (draw<pd.chance)
+        {
+            powerups.emplace_back(pd.type, sprites.createSprite(BackgroundLayer, brick->pos, pd.texture, PowerupSize), pd.duration);
             return;
         }
-
-        // check collision with level and reflect accordingly
-        auto [block, closest, isSolid]=level->getBallCollision(bp, ball.radius);
-        if (block)
+        else
         {
-            if (isSolid)
-            {
-                solid->play();
-                post.shake(0.05);
-            }
-            else
-            {
-                brick->play();
-                explodeBrick(block->color, block->pos, block->size, closest, glm::length(ball.velocity));
-            }
-
-            glm::vec2 impactDirection = closest-ball.sprite->pos;
-            // TODO: handle corners better
-            if (fabs(impactDirection.x) > fabs(impactDirection.y))  // reflect horizontally
-            {
-                if (impactDirection.x > 0) reflectBall(true, closest.x-ball.radius);
-                else reflectBall(true, closest.x+ball.radius);
-            }
-            else
-            {
-                if (impactDirection.y > 0) reflectBall(false, closest.y-ball.radius);
-                else reflectBall(false, closest.y+ball.radius);
-            }
-        }   
-        
-        // check paddle collision
-        glm::vec2 halfPlayerSize=player->size*0.5f;
-        // find closest point on sprite
-        glm::vec2 playerHitPos=bp-player->pos;    // vector to ball relative to player
-        playerHitPos = glm::clamp(playerHitPos, -halfPlayerSize, halfPlayerSize);   // clamped to player size
-        if (glm::length((playerHitPos+player->pos)-bp) < ball.radius) // hit
-        {
-            paddle->play();
-            reflectBall(false, player->pos.y-halfPlayerSize.y-ball.radius);
-
-            // check where it hit the board, and change velocity based on where it hit the board
-            float percentage = playerHitPos.x / halfPlayerSize.x;
-            // then move accordingly
-            float strength = 2.0f;
-            float oldVelocity = glm::length(ball.velocity);
-            ball.velocity.x = InitialBallVelocity.x * percentage * strength; 
-            ball.velocity = glm::normalize(ball.velocity) * oldVelocity;         
-        } 
+            draw-=pd.chance;
+        }
     }
 }
 
