@@ -175,7 +175,7 @@ try {
 
 
         // step 3.1.2: draw image buffer into frame buffer using effects
-        swapChain->beginRenderTo(commandBuffer, vk::ClearColorValue(0.5f, 0.0f, 0.0f, 1.0f));
+        swapChain->beginRenderTo(commandBuffer, vk::ClearColorValue(0.0f, 0.0f, 0.05f, 1.0f));
         postprocess->draw(commandBuffer, images->getCurrent());
         swapChain->endRenderTo(commandBuffer);
         images->cycle();

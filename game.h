@@ -23,13 +23,19 @@ public:
     static constexpr size_t ForegroundLayer = 2;
 
     static constexpr glm::vec2 InitialBallVelocity = { 100.0f, -350.0f };
+    static constexpr float PowerupBallVelocity = 1.2f;
     static constexpr float InitialBallSize = 12.5f;
     static constexpr glm::vec2 InitialPlayerSize = { 100.0f, 25.0f };
+    static constexpr glm::vec2 PowerUpPlayerSize = { 150.0f, 25.0f };
     static constexpr float PlayerVelocity = 300.0f;
  
     static constexpr glm::vec2 PowerupSize = { 60.0f, 15.0f }; 
     static constexpr float PowerupFallSpeed = 100.0f;
-
+    static constexpr glm::vec4 NeutralPowerupColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+    static constexpr glm::vec4 GoodPowerupColor = { 0.5f, 0.5f, 1.0f, 1.0f };
+    static constexpr glm::vec4 BadPowerupColor = { 1.0f, 0.25f, 0.25f, 1.0f };
+    static constexpr float PowerupChance=0.1f;
+    
     static constexpr float TrailDuration = .5f;
     static constexpr float TrailDecayPerSecond = 0.99f;      
     static constexpr float TrailEmitsPerSecond = 60.0f;
@@ -37,6 +43,8 @@ public:
     static constexpr glm::vec2 TrailSizeMin = { 5.0f, 5.0f };
     static constexpr glm::vec2 TrailSizeMax = { 15.0f, 15.0f };
     static constexpr glm::vec2 TrailPosVar = { 3.0f, 3.0f };
+
+
 
 public:
     enum State
@@ -50,6 +58,7 @@ public:
     {
         SpriteManager::Sprite sprite;
         bool stuck;
+        float stickOffset;
         float radius;
         glm::vec2 velocity;
     };
@@ -64,6 +73,7 @@ public:
     {
         enum Type
         {
+            None,
             Speed,
             Sticky,
             PassThrough,
@@ -73,7 +83,6 @@ public:
         };
 
         Type type;
-        SpriteManager::Sprite sprite;
         float timeLeft;
     };
 
@@ -81,6 +90,7 @@ public:
     {
         PowerUp::Type type;
         SpriteManager::Texture texture;
+        glm::vec4 color;
         float chance;
         float duration;
     };
@@ -99,6 +109,8 @@ public:
     void draw(const vk::CommandBuffer& commandBuffer) const;
 
     void maybeSpawnPowerups(const SpriteManager::Sprite& brick);
+    const PowerUpDefinition& getPowerUpFromTexture(SpriteManager::Texture texture);
+    const PowerUpDefinition& getPowerUpFromType(PowerUp::Type type);
 
     inline void setKey(size_t key, bool pressed)
     {
@@ -116,11 +128,12 @@ private:
     SpriteManager sprites;
     SpriteManager::Sprite background;
     SpriteManager::Sprite player;
-    SpriteManager::Texture defaultPaddle;
     Ball ball;
     ParticleSystem<TrailData> trail,brickParts;
     vector<PowerUpDefinition> powerupDefinitions; 
-    vector<PowerUp> powerups;
+    vector<SpriteManager::Sprite> floatingPowerups;
+    PowerUp activePowerup;
+
     float nextTrailEmit;
     
     void reflectBall(bool horizontal, float limit);

@@ -62,6 +62,14 @@ private:
         inline glm::vec2 bl() const noexcept {return { bottom(), left() }; }
         inline glm::vec2 br() const noexcept {return pos+size*0.5f; }
 
+        inline bool intersects(const SpriteEntry& rhs)
+        {
+            return  (bottom() >= rhs.top()) &&
+                    (top()<=rhs.bottom()) &&
+                    (left() <= rhs.right()) &&
+                    (right() >= rhs.left());
+        }
+
     private:
         bool valid=false;
         friend class SpriteManager;

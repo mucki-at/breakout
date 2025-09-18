@@ -30,7 +30,7 @@ Game::Game(const filesystem::path& levels, glm::vec2 fieldSize) :
 
     auto bg=sprites.getOrCreateTexture("background", "textures/background.jpg");
     background=sprites.createSprite(BackgroundLayer, fieldSize*0.5f, bg, fieldSize);
-    defaultPaddle = sprites.getOrCreateTexture("paddle","textures/paddle.png");
+    auto defaultPaddle = sprites.getOrCreateTexture("paddle","textures/paddle.png");
     player=sprites.createSprite(
         GameLayer,
         {}, // position will be set up when level is initialied
@@ -46,14 +46,21 @@ Game::Game(const filesystem::path& levels, glm::vec2 fieldSize) :
         { ball.radius*2.2f, ball.radius*2.2f }
     );
 
-    powerupDefinitions.emplace_back(PowerUp::Speed, sprites.getOrCreateTexture("speed", "textures/powerup_speed.png"), 1.0f, 1.0f);
-    powerupDefinitions.emplace_back(PowerUp::Sticky, sprites.getOrCreateTexture("sticky", "textures/powerup_sticky.png"), 1.0f, 1.0f);
-    powerupDefinitions.emplace_back(PowerUp::PassThrough, sprites.getOrCreateTexture("passthrough", "textures/powerup_passthrough.png"), 1.0f, 1.0f);
-    powerupDefinitions.emplace_back(PowerUp::Size, sprites.getOrCreateTexture("increase", "textures/powerup_increase.png"), 1.0f, 1.0f);
-    powerupDefinitions.emplace_back(PowerUp::Confuse, sprites.getOrCreateTexture("confuse", "textures/powerup_confuse.png"), 1.0f, 1.0f);
-    powerupDefinitions.emplace_back(PowerUp::Chaos, sprites.getOrCreateTexture("chaos", "textures/powerup_chaos.png"), 1.0f, 1.0f);
+    powerupDefinitions.emplace_back(PowerUp::None, defaultPaddle, NeutralPowerupColor, 0.0f, 0.0f);
+    powerupDefinitions.emplace_back(PowerUp::Speed, sprites.getOrCreateTexture("speed", "textures/powerup_speed.png"), GoodPowerupColor, 2.0f, 30.0f);
+    powerupDefinitions.emplace_back(PowerUp::Sticky, sprites.getOrCreateTexture("sticky", "textures/powerup_sticky.png"), GoodPowerupColor, 1.0f, 30.0f);
+    powerupDefinitions.emplace_back(PowerUp::PassThrough, sprites.getOrCreateTexture("passthrough", "textures/powerup_passthrough.png"), GoodPowerupColor, 1.0f, 10.0f);
+    powerupDefinitions.emplace_back(PowerUp::Size, sprites.getOrCreateTexture("increase", "textures/powerup_increase.png"), GoodPowerupColor, 2.0f, 30.0f);
+    powerupDefinitions.emplace_back(PowerUp::Confuse, sprites.getOrCreateTexture("confuse", "textures/powerup_confuse.png"), BadPowerupColor, 1.0f, 5.0f);
+    powerupDefinitions.emplace_back(PowerUp::Chaos, sprites.getOrCreateTexture("chaos", "textures/powerup_chaos.png"), BadPowerupColor, 1.0f, 5.0f);
 
-    for (auto&& pd : powerupDefinitions) pd.chance/=10.0f;
+    float sum=0.0f;
+    for (auto&& pd : powerupDefinitions) sum+=pd.chance;
+    for (auto&& pd : powerupDefinitions) pd.chance=(pd.chance*PowerupChance)/sum;
+
+
+    activePowerup.type=PowerUp::None;
+    activePowerup.timeLeft=0.0f;
 
     nextLevel();
 
@@ -125,7 +132,7 @@ void Game::update(float dt, PostProcess& post)
 
     if (ball.stuck)
     {
-        ball.sprite->pos.x=player->pos.x;
+        ball.sprite->pos.x=player->pos.x+ball.stickOffset;
         ball.sprite->pos.y=player->top()-ball.radius;
     }
     else
@@ -198,17 +205,20 @@ void Game::updateBall(float dt, PostProcess& post)
             maybeSpawnPowerups(block);
         }
 
-        glm::vec2 impactDirection = closest-ball.sprite->pos;
-        // TODO: handle corners better
-        if (fabs(impactDirection.x) > fabs(impactDirection.y))  // reflect horizontally
+        if ((activePowerup.type!=PowerUp::PassThrough) || (isSolid))
         {
-            if (impactDirection.x > 0) reflectBall(true, closest.x-ball.radius);
-            else reflectBall(true, closest.x+ball.radius);
-        }
-        else
-        {
-            if (impactDirection.y > 0) reflectBall(false, closest.y-ball.radius);
-            else reflectBall(false, closest.y+ball.radius);
+            glm::vec2 impactDirection = closest-ball.sprite->pos;
+            // TODO: handle corners better
+            if (fabs(impactDirection.x) > fabs(impactDirection.y))  // reflect horizontally
+            {
+                if (impactDirection.x > 0) reflectBall(true, closest.x-ball.radius);
+                else reflectBall(true, closest.x+ball.radius);
+            }
+            else
+            {
+                if (impactDirection.y > 0) reflectBall(false, closest.y-ball.radius);
+                else reflectBall(false, closest.y+ball.radius);
+            }
         }
     }   
     
@@ -220,6 +230,7 @@ void Game::updateBall(float dt, PostProcess& post)
     if (glm::length((playerHitPos+player->pos)-bp) < ball.radius) // hit
     {
         paddle->play();
+
         reflectBall(false, player->pos.y-halfPlayerSize.y-ball.radius);
 
         // check where it hit the board, and change velocity based on where it hit the board
@@ -229,46 +240,73 @@ void Game::updateBall(float dt, PostProcess& post)
         float oldVelocity = glm::length(ball.velocity);
         ball.velocity.x = InitialBallVelocity.x * percentage * strength; 
         ball.velocity = glm::normalize(ball.velocity) * oldVelocity;         
+        if (activePowerup.type==PowerUp::Sticky)
+        {
+            ball.stickOffset=ball.sprite->pos.x - player->pos.x;
+            ball.stuck=true;
+        }
     } 
 }
 
 void Game::updatePowerups(float dt, PostProcess& post)
 {
-    for (auto&& p : powerups)
+    activePowerup.timeLeft -= dt;
+
+    PowerUp newPowerUp=activePowerup;
+    if (activePowerup.timeLeft <= 0.0f)
     {
-        if (p.sprite)
+        newPowerUp={PowerUp::None, 0.0f};
+    }
+
+    for (auto&& p : floatingPowerups)
+    {
+        p->pos.y+=PowerupFallSpeed*dt;
+
+        if (p->intersects(*player))
         {
-            p.sprite->pos.y+=PowerupFallSpeed*dt;
-
-            if (p.sprite->top() > fieldSize.y)  // lost powerup
-            {
-                p.sprite=nullptr;
-                p.timeLeft=0.0f;
-            }
-            else if ((p.sprite->bottom() >= player->top()) &&
-                     (p.sprite->top()<=player->bottom()) &&
-                     (p.sprite->left() <= player->right()) &&
-                     (p.sprite->right() >= player->left()))
-            {
-                // powerup collected
-                player->texture=p.sprite->texture;
-
-
-
-                p.sprite=nullptr;
-            }
-        }
-        if (p.timeLeft>=0.0f)
-        {
-            p.timeLeft-=dt;
-            if (p.timeLeft < 0.0f)
-            {
-                // powerup expired
-                player->texture=defaultPaddle;
-            }
+            auto&& def=getPowerUpFromTexture(p->texture);
+            newPowerUp.type = def.type;
+            newPowerUp.timeLeft = def.duration;
+            p->pos.y = fieldSize.y+p->size.y;
         }
     }
-    erase_if(powerups, [](const PowerUp& p) { return p.sprite==nullptr && p.timeLeft<0.0f; });
+    erase_if(floatingPowerups, [limit=fieldSize.y](const auto& p) { return p->top()>limit; });
+
+    if (activePowerup.type == newPowerUp.type)
+    {
+        activePowerup.timeLeft = max(activePowerup.timeLeft, newPowerUp.timeLeft);
+    }
+    else
+    {
+        switch (activePowerup.type)
+        {
+        case PowerUp::None: break;
+        case PowerUp::Speed: ball.velocity = glm::normalize(ball.velocity) * glm::length(InitialBallVelocity); break;
+        case PowerUp::Sticky: break;
+        case PowerUp::PassThrough: break;
+        case PowerUp::Size: player->size = InitialPlayerSize; break;
+        case PowerUp::Confuse: post.confuse(0.0f); break;
+        case PowerUp::Chaos: post.chaos(0.0f); break;
+        }
+
+        activePowerup.type = newPowerUp.type;
+        activePowerup.timeLeft = newPowerUp.timeLeft;
+
+        switch (activePowerup.type)
+        {
+        case PowerUp::None: break;
+        case PowerUp::Speed: ball.velocity *= PowerupBallVelocity; break;
+        case PowerUp::Sticky: break;
+        case PowerUp::PassThrough: break;
+        case PowerUp::Size: player->size = PowerUpPlayerSize; break;
+        case PowerUp::Confuse: post.confuse(activePowerup.timeLeft); break;
+        case PowerUp::Chaos: post.chaos(activePowerup.timeLeft); break;
+        }
+
+        auto&& def = getPowerUpFromType(activePowerup.type);
+        player->texture = def.texture;
+        player->color = def.color;
+    }
 }
 
 void Game::maybeSpawnPowerups(const SpriteManager::Sprite& brick)
@@ -278,7 +316,7 @@ void Game::maybeSpawnPowerups(const SpriteManager::Sprite& brick)
     {
         if (draw<pd.chance)
         {
-            powerups.emplace_back(pd.type, sprites.createSprite(BackgroundLayer, brick->pos, pd.texture, PowerupSize), pd.duration);
+            floatingPowerups.emplace_back(sprites.createSprite(BackgroundLayer, brick->pos, pd.texture, PowerupSize, pd.color));
             return;
         }
         else
@@ -286,6 +324,20 @@ void Game::maybeSpawnPowerups(const SpriteManager::Sprite& brick)
             draw-=pd.chance;
         }
     }
+}
+
+const Game::PowerUpDefinition& Game::getPowerUpFromTexture(SpriteManager::Texture texture)
+{
+    for (const auto& def : powerupDefinitions)
+    {
+        if (def.texture == texture) return def;
+    }
+    return getPowerUpFromType(PowerUp::None);
+}
+
+const Game::PowerUpDefinition& Game::getPowerUpFromType(Game::PowerUp::Type type)
+{
+    return powerupDefinitions[static_cast<size_t>(type)];
 }
 
 void Game::processInput(float dt)
@@ -356,7 +408,11 @@ void Game::resetPlayer()
 {
     player->pos={fieldSize.x*0.5f, fieldSize.y-player->size.y};
     ball.stuck=true;
+    ball.stickOffset=0.0f;
     ball.velocity=InitialBallVelocity;
+
+    floatingPowerups.clear();
+    activePowerup.timeLeft=0.0f;
 }
 
 void Game::explodeBrick(
