@@ -52,6 +52,24 @@ private:
             valid(true)
         {}
 
+        inline float top() const noexcept {return pos.y-size.y*0.5f; }
+        inline float bottom() const noexcept {return pos.y+size.y*0.5f; }
+        inline float left() const noexcept {return pos.x-size.x*0.5f; }
+        inline float right() const noexcept {return pos.x+size.x*0.5f; }
+
+        inline glm::vec2 tl() const noexcept {return pos-size*0.5f; }
+        inline glm::vec2 tr() const noexcept {return { top(), right() }; }
+        inline glm::vec2 bl() const noexcept {return { bottom(), left() }; }
+        inline glm::vec2 br() const noexcept {return pos+size*0.5f; }
+
+        inline bool intersects(const SpriteEntry& rhs)
+        {
+            return  (bottom() >= rhs.top()) &&
+                    (top()<=rhs.bottom()) &&
+                    (left() <= rhs.right()) &&
+                    (right() >= rhs.left());
+        }
+
     private:
         bool valid=false;
         friend class SpriteManager;

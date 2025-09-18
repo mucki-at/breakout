@@ -23,10 +23,19 @@ public:
     static constexpr size_t ForegroundLayer = 2;
 
     static constexpr glm::vec2 InitialBallVelocity = { 100.0f, -350.0f };
+    static constexpr float PowerupBallVelocity = 1.2f;
     static constexpr float InitialBallSize = 12.5f;
     static constexpr glm::vec2 InitialPlayerSize = { 100.0f, 25.0f };
+    static constexpr glm::vec2 PowerUpPlayerSize = { 150.0f, 25.0f };
     static constexpr float PlayerVelocity = 300.0f;
-
+ 
+    static constexpr glm::vec2 PowerupSize = { 60.0f, 15.0f }; 
+    static constexpr float PowerupFallSpeed = 100.0f;
+    static constexpr glm::vec4 NeutralPowerupColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+    static constexpr glm::vec4 GoodPowerupColor = { 0.5f, 0.5f, 1.0f, 1.0f };
+    static constexpr glm::vec4 BadPowerupColor = { 1.0f, 0.25f, 0.25f, 1.0f };
+    static constexpr float PowerupChance=0.1f;
+    
     static constexpr float TrailDuration = .5f;
     static constexpr float TrailDecayPerSecond = 0.99f;      
     static constexpr float TrailEmitsPerSecond = 60.0f;
@@ -34,6 +43,8 @@ public:
     static constexpr glm::vec2 TrailSizeMin = { 5.0f, 5.0f };
     static constexpr glm::vec2 TrailSizeMax = { 15.0f, 15.0f };
     static constexpr glm::vec2 TrailPosVar = { 3.0f, 3.0f };
+
+
 
 public:
     enum State
@@ -47,6 +58,7 @@ public:
     {
         SpriteManager::Sprite sprite;
         bool stuck;
+        float stickOffset;
         float radius;
         glm::vec2 velocity;
     };
@@ -55,6 +67,32 @@ public:
     {
         glm::vec2 velocity;
         glm::f32 angularVelocity;
+    };
+
+    struct PowerUp
+    {
+        enum Type
+        {
+            None,
+            Speed,
+            Sticky,
+            PassThrough,
+            Size,
+            Confuse,
+            Chaos
+        };
+
+        Type type;
+        float timeLeft;
+    };
+
+    struct PowerUpDefinition
+    {
+        PowerUp::Type type;
+        SpriteManager::Texture texture;
+        glm::vec4 color;
+        float chance;
+        float duration;
     };
 
 public:
@@ -66,7 +104,13 @@ public:
     void updateScreenSize(const vk::Extent2D& extent);
     void processInput(float dt);
     void update(float dt, PostProcess& post);
+    void updateBall(float dt, PostProcess& post);
+    void updatePowerups(float dt, PostProcess& post);
     void draw(const vk::CommandBuffer& commandBuffer) const;
+
+    void maybeSpawnPowerups(const SpriteManager::Sprite& brick);
+    const PowerUpDefinition& getPowerUpFromTexture(SpriteManager::Texture texture);
+    const PowerUpDefinition& getPowerUpFromType(PowerUp::Type type);
 
     inline void setKey(size_t key, bool pressed)
     {
@@ -86,6 +130,10 @@ private:
     SpriteManager::Sprite player;
     Ball ball;
     ParticleSystem<TrailData> trail,brickParts;
+    vector<PowerUpDefinition> powerupDefinitions; 
+    vector<SpriteManager::Sprite> floatingPowerups;
+    PowerUp activePowerup;
+
     float nextTrailEmit;
     
     void reflectBall(bool horizontal, float limit);

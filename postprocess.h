@@ -15,6 +15,8 @@ public:
     void draw(const vk::CommandBuffer& commandBuffer, const vk::ImageView image);
 
     inline void shake(float length) { state.shake = length; }
+    inline void confuse(float length) { state.confuse = length; }
+    inline void chaos(float length) { state.chaos = length; }
 
 private:
     vk::raii::PipelineLayout pipelineLayout;
