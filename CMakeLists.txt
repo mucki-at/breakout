@@ -9,6 +9,7 @@ project (BreakOutVolcano VERSION 0.1.0 LANGUAGES CXX)
 
 find_package (glfw3 CONFIG REQUIRED)
 find_package (glm CONFIG REQUIRED)
+find_package (Freetype REQUIRED)
 find_package (Vulkan REQUIRED)
 find_package (VulkanMemoryAllocator CONFIG REQUIRED)
 find_package (VulkanMemoryAllocator-Hpp CONFIG REQUIRED)
@@ -65,6 +66,7 @@ add_executable (breakout
     vma.cpp
     texture.cpp
     audiomanager.cpp
+    font.cpp
 )
 
 target_link_libraries (breakout
@@ -73,6 +75,7 @@ target_link_libraries (breakout
     GPUOpen::VulkanMemoryAllocator
     VulkanMemoryAllocator-Hpp::VulkanMemoryAllocator-Hpp
     SDL3::SDL3
+    Freetype::Freetype
 )
 
 #target_include_directories (breakout PRIVATE ${STB_INCLUDEDIR})
@@ -81,4 +84,5 @@ add_slang_shader(slang SOURCES shader.slang)
 add_slang_shader(sprites SOURCES sprites.slang)
 add_slang_shader(particles SOURCES particles.slang)
 add_slang_shader(postprocess SOURCES postprocess.slang)
+add_slang_shader(text SOURCES text.slang)
 add_dependencies(breakout shaders)

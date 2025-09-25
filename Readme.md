@@ -15,3 +15,4 @@ Assets used by the game:
 * thud sounds (https://freesound.org/people/EdgardEdition/packs/7185/) - CC-BY-3.0
 * ball lost (https://freesound.org/people/harrietniamh/packs/23407/) - CC-BY-4.0
 * go sound (??? Found on freesound.org) - ???
+* Exan-3 font (https://www.behance.net/asset/703189/Exan-3#) - personal license

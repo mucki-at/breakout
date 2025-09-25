@@ -18,7 +18,8 @@ Game::Game(const filesystem::path& levels, glm::vec2 fieldSize) :
     sprites(3, 1024, 16),
     trail(ceil(TrailEmitsPerSecond*TrailDuration)+1, "textures/circle.png"),
     brickParts(128,  "textures/fragment.png"),
-    nextTrailEmit(0.0f)
+    nextTrailEmit(0.0f),
+    font("textures/exan3.ttf")
 {
     for (auto const& dir_entry : std::filesystem::directory_iterator{levels})
     {
@@ -104,6 +105,8 @@ void Game::updateScreenSize(const vk::Extent2D& extent)
     sprites.setLayerTransform(ForegroundLayer, ortho);
     trail.setTransformation(ortho);
     brickParts.setTransformation(ortho);
+
+    font.resize(ortho, fieldSize, fieldSize.y/20.0f);
 }
 
 void Game::update(float dt, PostProcess& post)
@@ -377,6 +380,8 @@ void Game::draw(const vk::CommandBuffer& commandBuffer) const
     sprites.drawLayer(GameLayer, commandBuffer);
     brickParts.draw(commandBuffer);
     sprites.drawLayer(ForegroundLayer, commandBuffer);
+
+    font.renderText(commandBuffer, {100,100}, "Test");
 }
 
 void Game::reflectBall(bool horizontal, float limit)

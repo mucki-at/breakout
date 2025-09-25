@@ -9,6 +9,7 @@
 #include "audiomanager.h"
 #include "particlesystem.h"
 #include "postprocess.h"
+#include "font.h"
 
 //! @brief Game holds all game-related state and functionality.
 //! Combines all game-related data into a single class for
@@ -154,4 +155,6 @@ private:
 
     AudioManager audioManager;
     AudioManager::Audio brick,go,lost,paddle,solid,wall;
+
+    Font font;
 };
