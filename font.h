@@ -16,7 +16,7 @@ public:
     Font(const filesystem::path& filename);
     ~Font();
 
-    void resize(const glm::mat4& transformation, const glm::vec2& logicalScreenSize, float emSizeInDisplayUnits);
+    void resize(const glm::mat4& transformation, const vk::Extent2D& screenSize, float emSizeInDisplayUnits);
     void renderText(const vk::CommandBuffer& buffer, const glm::vec2& baselinePos, const std::string& ascii) const;
 
 private:

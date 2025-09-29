@@ -18,8 +18,6 @@
 #include <SDL3/SDL.h>
 #include <chrono>
 
-static inline constexpr glm::vec2 LogicalSize = { 800.0f, 600.0f };
-
 using GameClock = chrono::high_resolution_clock;
 using Seconds = chrono::duration<float>;
 
@@ -35,8 +33,8 @@ try {
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
     auto window = SDL_CreateWindow(
         "Break Out Volcano !!",
-        LogicalSize.x,
-        LogicalSize.y,
+        Game::LogicalSize.x*16,
+        Game::LogicalSize.y*16,
         SDL_WINDOW_RESIZABLE | 
         SDL_WINDOW_HIGH_PIXEL_DENSITY |
         SDL_WINDOW_VULKAN
@@ -78,7 +76,7 @@ try {
     auto postprocess=make_unique<PostProcess>();
 
     // Step 2: initialize Game
-    auto breakout = make_unique<Game>("levels",LogicalSize);
+    auto breakout = make_unique<Game>("levels");
     breakout->updateScreenSize(swapChain->getDescription().extent);
 
     // Step 3: Run game loop
@@ -168,14 +166,14 @@ try {
         auto& commandBuffer = swapChain->beginFrame();
 
         // Step 3.1.1: draw frame into image buffer
-        images->beginRenderTo(commandBuffer, vk::ClearColorValue(0.0f, 0.0f, 0.05f, 1.0f));
+        images->beginRenderTo(commandBuffer, vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f));
         breakout->draw(commandBuffer);
         images->endRenderTo(commandBuffer);
         images->getCurrent().transition(commandBuffer, vk::PipelineStageFlagBits2::eFragmentShader, vk::AccessFlagBits2::eShaderSampledRead, vk::ImageLayout::eShaderReadOnlyOptimal);
 
 
         // step 3.1.2: draw image buffer into frame buffer using effects
-        swapChain->beginRenderTo(commandBuffer, vk::ClearColorValue(0.0f, 0.0f, 0.05f, 1.0f));
+        swapChain->beginRenderTo(commandBuffer, vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f));
         postprocess->draw(commandBuffer, images->getCurrent());
         swapChain->endRenderTo(commandBuffer);
         images->cycle();

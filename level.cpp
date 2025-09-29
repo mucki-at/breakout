@@ -6,66 +6,69 @@
 #include <fstream>
 #include <sstream>
 
-Level::Level(const filesystem::path& path, glm::vec2 size, SpriteManager& sprites, size_t layer)
+static glm::vec4 Colors[]=
+{
+    { 0.0f, 0.0f, 0.0f, 0.0f },     // empty
+    { 0.95f, 0.95f, 0.95f, 1.0f },  // 1 - white - 50 pts
+    { 1.0f, 0.56f, 0.0f, 1.0f },    // 2 - orange - 60 pts
+    { 0.0f, 1.0f, 1.0f, 1.0f },     // 3 - cyan - 70 pts
+    { 0.0f, 1.0f, 0.0f, 1.0f },     // 4 - green - 80 pts
+    { 1.0f, 0.0f, 0.0f, 1.0f },     // 5 - red - 90 pts
+    { 0.0f, 0.43f, 1.0f, 1.0f},     // 6 - blue - 100 pts
+    { 1.0f, 0.0f, 1.0f, 1.0f},      // 7 - purple - 110 pts
+    { 1.0f, 1.0f, 0.0f, 1.0f},      // 8 - yellow - 120 pts
+    { 0.62f, 0.62f, 0.62f, 1.0f},   // S - silver - 50*level pts
+    { 0.74f, 0.69f, 0.0f, 1.0f}     // X - solid
+};
+
+Level::Level(const filesystem::path& path, glm::vec2 topLeft, glm::vec2 blockSize, SpriteManager& sprites, size_t layer)
 {
     block = sprites.getOrCreateTexture("block", "textures/block.png");
     solid = sprites.getOrCreateTexture("solid", "textures/solid.png");
 
     // load from file
-    unsigned int tileCode;
     string line;
     auto file=ifstream(path);
-    std::vector<std::vector<unsigned int>> tileData;
+    float y=topLeft.y + blockSize.y*0.5f;
     while (getline(file, line)) // read each line from level file
     {
-        std::istringstream sstream(line);
-        std::vector<unsigned int> row;
-        while (sstream >> tileCode) // read each word separated by spaces
-            row.push_back(tileCode);
-        tileData.push_back(row);
-    }
-    
-    // calculate dimensions
-    unsigned int height = tileData.size();
-    unsigned int width  = tileData[0].size();
-    float unit_width    = size.x / static_cast<float>(width);
-    float unit_height   = size.y / static_cast<float>(height);
-
-    glm::vec4 colors[]=
-    {
-        { 0.0f, 0.0f, 0.0f, 0.0f },
-        { 0.8f, 0.8f, 0.7f, 1.0f },
-        { 0.2f, 0.6f, 1.0f, 1.0f },
-        { 0.0f, 0.7f, 0.0f, 1.0f },
-        { 0.8f, 0.8f, 0.4f, 1.0f },
-        { 1.0f, 0.5f, 0.0f, 1.0f }
-    };
-    unsigned int maxColor = 5;
-
-    // initialize level tiles based on tileData		
-    for (unsigned int y = 0; y < height; ++y)
-    {
-        for (unsigned int x = 0; x < width; ++x)
+        float x=topLeft.x - blockSize.x*0.5f;
+        for (char c : line)
         {
-            if (tileData[y][x] == 0) continue;
+            x+=blockSize.x;
+            if (c==32) continue;
 
-            auto color=tileData[y][x];
-            bool isSolid=color==1;
+            auto color = c-48;
+            size_t hp = 1;
+            if (c=='S')
+            {
+                color=9;
+                hp=2;
+            }
+            else if (c=='X')
+            {
+                color=10;
+                hp=size_t(-1);
+            }
+
             bricks.emplace_back(
                 sprites.createSprite(
                     layer, 
-                    {unit_width * x + unit_width*0.5f, unit_height * y + unit_height*0.5f},
-                    isSolid ? solid:block,
-                    {unit_width, unit_height},
-                    colors[min(color, maxColor)]
+                    {x,y},
+                    hp>1 ? solid:block,
+                    blockSize,
+                    Colors[color]
                 ),
-                isSolid
+                40+color*10,
+                hp
             );
+            
         }
-    }  
+        y+=blockSize.y;
+    }
 }
 
-tuple<SpriteManager::Sprite, glm::vec2, bool> Level::getBallCollision(const glm::vec2& pos, float radius)
+tuple<SpriteManager::Sprite, glm::vec2, size_t, size_t> Level::getBallCollision(const glm::vec2& pos, float radius)
 {
     for (auto&& b : bricks)
     {
@@ -79,15 +82,27 @@ tuple<SpriteManager::Sprite, glm::vec2, bool> Level::getBallCollision(const glm:
             if (glm::length(closest-pos) < radius) // hit
             {
                 auto result=b.sprite;
-                if (!b.solid) b.sprite=nullptr; // destroy block
-                return tie(result, closest, b.solid);
+                bool solid=(b.hp == size_t(-1));
+                if (!solid)
+                {
+                    b.hp--;
+                    if (b.hp==0)
+                    {
+                        b.sprite=nullptr; // destroy block
+                    }
+                    else if (b.hp==1)
+                    {
+                        b.sprite->texture=block;
+                    }
+                }
+                return tie(result, closest, b.hp, b.score);
             }
         }
     }
-    return make_tuple(SpriteManager::Sprite{}, glm::vec2{}, false);
+    return make_tuple(SpriteManager::Sprite{}, glm::vec2{}, false, 0);
 }
 
 bool Level::isComplete()
 {
-    return ranges::all_of(bricks, [](auto&&b) { return b.solid || b.sprite==nullptr; });
+    return ranges::all_of(bricks, [](auto&&b) { return (b.hp==size_t(-1)) || b.sprite==nullptr; });
 }

@@ -11,13 +11,15 @@
 #include <SDL3/SDL_scancode.h>
 
 //! @brief constructor
-Game::Game(const filesystem::path& levels, glm::vec2 fieldSize) :
+Game::Game(const filesystem::path& levels) :
     state(Active),
     keys(),
-    fieldSize(fieldSize),
+    fieldTL(FieldPosition),
+    fieldBR(FieldPosition+FieldSize),
     sprites(3, 1024, 16),
     trail(ceil(TrailEmitsPerSecond*TrailDuration)+1, "textures/circle.png"),
     brickParts(128,  "textures/fragment.png"),
+    score(0),
     nextTrailEmit(0.0f),
     font("textures/exan3.ttf")
 {
@@ -29,8 +31,20 @@ Game::Game(const filesystem::path& levels, glm::vec2 fieldSize) :
     ranges::sort(levelList);
     curLevel=levelList.end();
 
-    auto bg=sprites.getOrCreateTexture("background", "textures/background.jpg");
-    background=sprites.createSprite(BackgroundLayer, fieldSize*0.5f, bg, fieldSize);
+    auto bg=sprites.getOrCreateTexture("background", "textures/background.png");
+    background=sprites.createSprite(BackgroundLayer, LogicalSize*0.5f, bg, BackgroundSize);
+
+    auto wallTex=sprites.getOrCreateTexture("wall", "textures/wall.png");
+    for (float x=1.0f; x<30.0f; x+=2.0f)
+    {
+        walls.push_back(sprites.createSprite(ForegroundLayer, {x, 1.0f}, wallTex, {2.0f, 2.0f}));
+    }
+    for (float y=3.0f; y<30.0f; y+=2.0f)
+    {  
+        walls.push_back(sprites.createSprite(ForegroundLayer, {1.0f, y}, wallTex, {2.0f, 2.0f}));
+        walls.push_back(sprites.createSprite(ForegroundLayer, {29.0f, y}, wallTex, {2.0f, 2.0f}));
+    }
+
     auto defaultPaddle = sprites.getOrCreateTexture("paddle","textures/paddle.png");
     player=sprites.createSprite(
         GameLayer,
@@ -80,21 +94,21 @@ void Game::updateScreenSize(const vk::Extent2D& extent)
 {
     glm::vec2 screen={extent.width, extent.height};
 
-    float fieldAspect=fieldSize.x/fieldSize.y;
+    float fieldAspect=LogicalSize.x/LogicalSize.y;
     float screenAspect=screen.x/screen.y;
 
     glm::vec2 viewport;
     if (fieldAspect > screenAspect) // field is wider than screen
     {
-        viewport.x = fieldSize.x;
-        viewport.y = fieldSize.x/screenAspect;
+        viewport.x = LogicalSize.x;
+        viewport.y = LogicalSize.x/screenAspect;
     }
     else
     {
-        viewport.x = fieldSize.y*screenAspect;
-        viewport.y = fieldSize.y;
+        viewport.x = LogicalSize.y*screenAspect;
+        viewport.y = LogicalSize.y;
     }
-    glm::vec2 offset=(viewport-fieldSize)*0.5f;
+    glm::vec2 offset=(viewport-LogicalSize)*0.5f;
 
     auto ortho=glm::orthoRH_ZO(
         -offset.x, viewport.x-offset.x,
@@ -106,7 +120,7 @@ void Game::updateScreenSize(const vk::Extent2D& extent)
     trail.setTransformation(ortho);
     brickParts.setTransformation(ortho);
 
-    font.resize(ortho, fieldSize, fieldSize.y/20.0f);
+    font.resize(ortho, extent, FontSize);
 }
 
 void Game::update(float dt, PostProcess& post)
@@ -124,7 +138,7 @@ void Game::update(float dt, PostProcess& post)
     brickParts.update(dt, [dt,decay](auto& p) {
         p.move(p.velocity*dt);
         p.rotate(p.angularVelocity*dt);
-        p.velocity.y+=dt*1000.0f;
+        p.velocity.y+=dt*Gravity;
         p.color.a*=decay;
     });
 
@@ -159,7 +173,7 @@ void Game::updateBall(float dt, PostProcess& post)
             bp+ofs,
             glm::linearRand(TrailSizeMin, TrailSizeMax),
             glm::linearRand(0.0f, float(M_PI)*0.5f),
-            ofs*20.0f,
+            ofs*2.0f,
             glm::linearRand(-float(M_PI),float(M_PI))*3.0f
         );
         nextTrailEmit-=1.0f;
@@ -168,23 +182,23 @@ void Game::updateBall(float dt, PostProcess& post)
     bp += ball.velocity * dt;
 
     // bounce off of walls
-    if (bp.x <= ball.radius)
+    if (bp.x <= fieldTL.x+ball.radius)
     {
         wall->play();
-        reflectBall(true, ball.radius);
+        reflectBall(true, fieldTL.x+ball.radius);
     }
-    else if (bp.x >= fieldSize.x-ball.radius)
+    else if (bp.x >= fieldBR.x-ball.radius)
     {
         wall->play();
-        reflectBall(true, fieldSize.x-ball.radius);
+        reflectBall(true, fieldBR.x-ball.radius);
     }
 
-    if (bp.y <= ball.radius)
+    if (bp.y <= fieldTL.y+ball.radius)
     {
         wall->play();
-        reflectBall(false, ball.radius);
+        reflectBall(false, fieldTL.y+ball.radius);
     }
-    else if (bp.y >= fieldSize.y+ball.radius)
+    else if (bp.y >= fieldBR.y+ball.radius)
     {
         lost->play();
         resetPlayer();
@@ -192,23 +206,28 @@ void Game::updateBall(float dt, PostProcess& post)
     }
 
     // check collision with level and reflect accordingly
-    auto [block, closest, isSolid]=level->getBallCollision(bp, ball.radius);
+    auto [block, closest, hp, score]=level->getBallCollision(bp, ball.radius);
     if (block)
     {
-        if (isSolid)
+        if (hp==size_t(-1))
         {
             solid->play();
             post.shake(0.05);
+        }
+        else if (hp>0)
+        {
+           solid->play();
+           explodeBrick(block->color, block->pos, block->size, closest, glm::length(ball.velocity));             
         }
         else
         {
             brick->play();
             explodeBrick(block->color, block->pos, block->size, closest, glm::length(ball.velocity));
-
+            this->score+=score;
             maybeSpawnPowerups(block);
         }
 
-        if ((activePowerup.type!=PowerUp::PassThrough) || (isSolid))
+        if ((activePowerup.type!=PowerUp::PassThrough) || (hp>0))
         {
             glm::vec2 impactDirection = closest-ball.sprite->pos;
             // TODO: handle corners better
@@ -239,7 +258,7 @@ void Game::updateBall(float dt, PostProcess& post)
         // check where it hit the board, and change velocity based on where it hit the board
         float percentage = playerHitPos.x / halfPlayerSize.x;
         // then move accordingly
-        float strength = 2.0f;
+        float strength = 1.0f;
         float oldVelocity = glm::length(ball.velocity);
         ball.velocity.x = InitialBallVelocity.x * percentage * strength; 
         ball.velocity = glm::normalize(ball.velocity) * oldVelocity;         
@@ -270,10 +289,10 @@ void Game::updatePowerups(float dt, PostProcess& post)
             auto&& def=getPowerUpFromTexture(p->texture);
             newPowerUp.type = def.type;
             newPowerUp.timeLeft = def.duration;
-            p->pos.y = fieldSize.y+p->size.y;
+            p->pos.y = fieldBR.y+p->size.y;
         }
     }
-    erase_if(floatingPowerups, [limit=fieldSize.y](const auto& p) { return p->top()>limit; });
+    erase_if(floatingPowerups, [limit=fieldBR.y](const auto& p) { return p->top()>limit; });
 
     if (activePowerup.type == newPowerUp.type)
     {
@@ -283,13 +302,11 @@ void Game::updatePowerups(float dt, PostProcess& post)
     {
         switch (activePowerup.type)
         {
-        case PowerUp::None: break;
         case PowerUp::Speed: ball.velocity = glm::normalize(ball.velocity) * glm::length(InitialBallVelocity); break;
-        case PowerUp::Sticky: break;
-        case PowerUp::PassThrough: break;
         case PowerUp::Size: player->size = InitialPlayerSize; break;
         case PowerUp::Confuse: post.confuse(0.0f); break;
         case PowerUp::Chaos: post.chaos(0.0f); break;
+        default: break;
         }
 
         activePowerup.type = newPowerUp.type;
@@ -297,13 +314,11 @@ void Game::updatePowerups(float dt, PostProcess& post)
 
         switch (activePowerup.type)
         {
-        case PowerUp::None: break;
         case PowerUp::Speed: ball.velocity *= PowerupBallVelocity; break;
-        case PowerUp::Sticky: break;
-        case PowerUp::PassThrough: break;
         case PowerUp::Size: player->size = PowerUpPlayerSize; break;
         case PowerUp::Confuse: post.confuse(activePowerup.timeLeft); break;
         case PowerUp::Chaos: post.chaos(activePowerup.timeLeft); break;
+        default:break;
         }
 
         auto&& def = getPowerUpFromType(activePowerup.type);
@@ -327,6 +342,12 @@ void Game::maybeSpawnPowerups(const SpriteManager::Sprite& brick)
             draw-=pd.chance;
         }
     }
+}
+
+void Game::forceSpawnPowerup(PowerUp::Type type, const glm::vec2& pos)
+{
+    auto&& pd=getPowerUpFromType(type);
+    floatingPowerups.emplace_back(sprites.createSprite(BackgroundLayer, pos, pd.texture, PowerupSize, pd.color));
 }
 
 const Game::PowerUpDefinition& Game::getPowerUpFromTexture(SpriteManager::Texture texture)
@@ -353,15 +374,24 @@ void Game::processInput(float dt)
             keys[SDL_SCANCODE_L]=false;
         }
 
+        for (int pu=PowerUp::Speed; pu<=PowerUp::MAX; ++pu)
+        {
+            if (keys[SDL_SCANCODE_1+pu-1])
+            {
+                forceSpawnPowerup(PowerUp::Type(pu), player->pos);
+                keys[SDL_SCANCODE_1+pu-1]=false;
+            }
+        }
+
         float ds = PlayerVelocity * dt;
         // move playerboard
         if (keys[SDL_SCANCODE_LEFT] || keys[SDL_SCANCODE_A])
         {
-            player->pos.x = max(player->pos.x-ds, player->size.x*0.5f);
+            player->pos.x = max(player->pos.x-ds, fieldTL.x+player->size.x*0.5f);
         }
         if (keys[SDL_SCANCODE_RIGHT] || keys[SDL_SCANCODE_D])
         {
-            player->pos.x = min(player->pos.x+ds, fieldSize.x-player->size.x*0.5f);
+            player->pos.x = min(player->pos.x+ds, fieldBR.x-player->size.x*0.5f);
         }
 
         if (keys[SDL_SCANCODE_SPACE] && ball.stuck)
@@ -381,7 +411,9 @@ void Game::draw(const vk::CommandBuffer& commandBuffer) const
     brickParts.draw(commandBuffer);
     sprites.drawLayer(ForegroundLayer, commandBuffer);
 
-    font.renderText(commandBuffer, {100,100}, "Test");
+    font.renderText(commandBuffer, ScoreLabelPos, "SCORE");
+
+    font.renderText(commandBuffer, ScorePos, format("{:05}", score));
 }
 
 void Game::reflectBall(bool horizontal, float limit)
@@ -405,13 +437,13 @@ void Game::nextLevel()
     else ++curLevel;
     if (curLevel==levelList.end()) curLevel=levelList.begin();
 
-    level=make_unique<Level>(*curLevel, glm::vec2{ fieldSize.x, fieldSize.y/2 }, sprites, GameLayer);
+    level=make_unique<Level>(*curLevel, FieldPosition, BlockSize, sprites, GameLayer);
     resetPlayer();
 }
 
 void Game::resetPlayer()
 {
-    player->pos={fieldSize.x*0.5f, fieldSize.y-player->size.y};
+    player->pos={(fieldTL.x+fieldBR.x)*0.5f, fieldBR.y-player->size.y};
     ball.stuck=true;
     ball.stickOffset=0.0f;
     ball.velocity=InitialBallVelocity;

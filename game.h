@@ -23,15 +23,21 @@ public:
     static constexpr size_t GameLayer = 1;
     static constexpr size_t ForegroundLayer = 2;
 
-    static constexpr glm::vec2 InitialBallVelocity = { 100.0f, -350.0f };
+    static constexpr glm::vec2 LogicalSize = { 40.0f, 30.0f };
+    static constexpr glm::vec2 BackgroundSize = { 48.0f, 38.0f };
+    static constexpr glm::vec2 FieldPosition = { 2.0f, 2.0f };
+    static constexpr glm::vec2 FieldSize = { 26.0f, 28.0f };
+    static constexpr glm::vec2 BlockSize = { 2.0f, 1.0f };
+
+    static constexpr glm::vec2 InitialBallVelocity = { 10.0f, -10.0f };
     static constexpr float PowerupBallVelocity = 1.2f;
-    static constexpr float InitialBallSize = 12.5f;
-    static constexpr glm::vec2 InitialPlayerSize = { 100.0f, 25.0f };
-    static constexpr glm::vec2 PowerUpPlayerSize = { 150.0f, 25.0f };
-    static constexpr float PlayerVelocity = 300.0f;
+    static constexpr float InitialBallSize = 0.5f;
+    static constexpr glm::vec2 InitialPlayerSize = { 4.0f, 1.0f };
+    static constexpr glm::vec2 PowerUpPlayerSize = { 6.0f, 1.0f };
+    static constexpr float PlayerVelocity = 20.0f;
  
-    static constexpr glm::vec2 PowerupSize = { 60.0f, 15.0f }; 
-    static constexpr float PowerupFallSpeed = 100.0f;
+    static constexpr glm::vec2 PowerupSize = { 4.0f, 1.0f }; 
+    static constexpr float PowerupFallSpeed = 3.0f;
     static constexpr glm::vec4 NeutralPowerupColor = { 1.0f, 1.0f, 1.0f, 1.0f };
     static constexpr glm::vec4 GoodPowerupColor = { 0.5f, 0.5f, 1.0f, 1.0f };
     static constexpr glm::vec4 BadPowerupColor = { 1.0f, 0.25f, 0.25f, 1.0f };
@@ -41,11 +47,15 @@ public:
     static constexpr float TrailDecayPerSecond = 0.99f;      
     static constexpr float TrailEmitsPerSecond = 60.0f;
     static constexpr glm::vec4 TrailColor = { 1.0f, 1.0f, 0.2f, 1.0f };
-    static constexpr glm::vec2 TrailSizeMin = { 5.0f, 5.0f };
-    static constexpr glm::vec2 TrailSizeMax = { 15.0f, 15.0f };
-    static constexpr glm::vec2 TrailPosVar = { 3.0f, 3.0f };
+    static constexpr glm::vec2 TrailSizeMin = { 0.2f, 0.2f };
+    static constexpr glm::vec2 TrailSizeMax = { 0.5f, 0.5f };
+    static constexpr glm::vec2 TrailPosVar = { 0.3f, 0.3f };
+    static constexpr float Gravity = 62.0f;
 
+    static constexpr float FontSize = 1.5f;
 
+    static constexpr glm::vec2 ScoreLabelPos = { 31.0f, 4.0f };
+    static constexpr glm::vec2 ScorePos =      { 31.0f, 8.0f };
 
 public:
     enum State
@@ -80,7 +90,10 @@ public:
             PassThrough,
             Size,
             Confuse,
-            Chaos
+            Chaos,
+
+
+            MAX
         };
 
         Type type;
@@ -98,7 +111,7 @@ public:
 
 public:
     // constructor/destructor
-    Game(const filesystem::path& levels, glm::vec2 fieldSize);
+    Game(const filesystem::path& levels);
     ~Game();
 
     // game loop
@@ -110,6 +123,8 @@ public:
     void draw(const vk::CommandBuffer& commandBuffer) const;
 
     void maybeSpawnPowerups(const SpriteManager::Sprite& brick);
+    void forceSpawnPowerup(PowerUp::Type type, const glm::vec2& pos);
+
     const PowerUpDefinition& getPowerUpFromTexture(SpriteManager::Texture texture);
     const PowerUpDefinition& getPowerUpFromType(PowerUp::Type type);
 
@@ -123,17 +138,20 @@ private:
     // game state
     State  state;
     bool   keys[KeyCount];
-    glm::vec2 fieldSize;
+    glm::vec2 fieldTL;
+    glm::vec2 fieldBR;
 
     // draws all our sprites
     SpriteManager sprites;
     SpriteManager::Sprite background;
     SpriteManager::Sprite player;
+    vector<SpriteManager::Sprite> walls;
     Ball ball;
     ParticleSystem<TrailData> trail,brickParts;
     vector<PowerUpDefinition> powerupDefinitions; 
     vector<SpriteManager::Sprite> floatingPowerups;
     PowerUp activePowerup;
+    size_t score;
 
     float nextTrailEmit;
     

@@ -9,17 +9,18 @@
 class Level
 {
 public:
-    Level(const filesystem::path& file, glm::vec2 size, SpriteManager& sprites, size_t layer);
+    Level(const filesystem::path& file, glm::vec2 topLeft, glm::vec2 blockSize, SpriteManager& sprites, size_t layer);
 
     bool isComplete();
 
-    tuple<SpriteManager::Sprite,glm::vec2,bool> getBallCollision(const glm::vec2& pos, float radius);
+    tuple<SpriteManager::Sprite,glm::vec2,size_t,size_t> getBallCollision(const glm::vec2& pos, float radius);
     
 private:
     struct Brick
     {
         SpriteManager::Sprite sprite;
-        bool solid;
+        size_t score;
+        size_t hp;
     };
 
     SpriteManager::Texture block, solid;

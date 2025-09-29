@@ -136,13 +136,14 @@ Font::~Font()
     }
 }
 
-void Font::resize(const glm::mat4& transformation, const glm::vec2& logicalScreenSize, float emSizeInLogicalUnits)
+void Font::resize(const glm::mat4& transformation, const vk::Extent2D& screenSize, float emSizeInLogicalUnits)
 {
     glm::vec2 unitVectorX = { transformation[0][0], transformation[0][1] };
     glm::vec2 unitVectorY = { transformation[1][0], transformation[1][1] };
 
-    float pixelDensityX = logicalScreenSize.x*glm::length(unitVectorX);
-    float pixelDensityY = logicalScreenSize.y*glm::length(unitVectorY);
+    // clip coordinates are from -1 to 1, so density is half
+    float pixelDensityX = static_cast<float>(screenSize.width)*glm::length(unitVectorX)*0.5f;
+    float pixelDensityY = static_cast<float>(screenSize.height)*glm::length(unitVectorY)*0.5f;
 
     if (FT_Set_Pixel_Sizes(face, emSizeInLogicalUnits*pixelDensityX, emSizeInLogicalUnits*pixelDensityX))
         throw runtime_error("ERROR::Freetype: Failed set font size");
