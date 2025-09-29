@@ -3,3 +3,4 @@ build/
 shaders/
 .DS_Store
 *.*~
+*.kra-autosave.kra
