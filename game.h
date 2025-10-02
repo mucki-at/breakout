@@ -143,9 +143,8 @@ private:
 
     // draws all our sprites
     SpriteManager sprites;
-    SpriteManager::Sprite background;
+    vector<SpriteManager::Sprite> staticImages;
     SpriteManager::Sprite player;
-    vector<SpriteManager::Sprite> walls;
     Ball ball;
     ParticleSystem<TrailData> trail,brickParts;
     vector<PowerUpDefinition> powerupDefinitions; 

@@ -16,6 +16,38 @@ find_package (VulkanMemoryAllocator-Hpp CONFIG REQUIRED)
 find_package (SDL3 CONFIG REQUIRED)
 
 find_program(SLANGC_EXECUTABLE slangc HINTS $ENV{VULKAN_SDK}/bin REQUIRED)
+find_program(MAGICK_EXECUTABLE magick REQUIRED)
+
+function (add_texture arg_NAME)
+    cmake_parse_arguments(PARSE_ARGV 1 arg "" "TARGET;IMAGE" "")
+
+    if (NOT arg_TARGET)
+        set(arg_TARGET textures)
+    endif()
+    set (arg_TEXTURES_DIR ${CMAKE_CURRENT_LIST_DIR}/textures)
+    set (arg_OUTPUT ${arg_TEXTURES_DIR}/${arg_NAME}.png)
+  
+    add_custom_command (
+        OUTPUT ${arg_TEXTURES_DIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${arg_TEXTURES_DIR}
+    )
+    add_custom_command (
+            OUTPUT  ${arg_OUTPUT}
+            COMMAND ${MAGICK_EXECUTABLE} ${arg_IMAGE} ${arg_OUTPUT}
+            WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+            DEPENDS ${arg_SHADERS_DIR} ${arg_IMAGE}
+            COMMENT "Compiling Textures"
+            VERBATIM
+    )
+
+    add_custom_target (${arg_NAME} DEPENDS ${arg_OUTPUT})
+
+    if(NOT TARGET ${arg_TARGET})
+        add_custom_target (${arg_TARGET})
+    endif()
+    add_dependencies(${arg_TARGET} ${arg_NAME})
+endfunction()
+
 
 function (add_slang_shader arg_NAME)
     cmake_parse_arguments(PARSE_ARGV 1 arg "" "TARGET" "SOURCES")
@@ -86,3 +118,9 @@ add_slang_shader(particles SOURCES particles.slang)
 add_slang_shader(postprocess SOURCES postprocess.slang)
 add_slang_shader(text SOURCES text.slang)
 add_dependencies(breakout shaders)
+
+
+add_texture(frame_left IMAGE resource/frame_left.ora)
+add_texture(frame_top IMAGE resource/frame_top.ora)
+add_texture(frame_right IMAGE resource/frame_right.ora)
+add_dependencies(breakout textures)

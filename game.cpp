@@ -32,18 +32,10 @@ Game::Game(const filesystem::path& levels) :
     curLevel=levelList.end();
 
     auto bg=sprites.getOrCreateTexture("background", "textures/background.png");
-    background=sprites.createSprite(BackgroundLayer, LogicalSize*0.5f, bg, BackgroundSize);
-
-    auto wallTex=sprites.getOrCreateTexture("wall", "textures/wall.png");
-    for (float x=1.0f; x<30.0f; x+=2.0f)
-    {
-        walls.push_back(sprites.createSprite(ForegroundLayer, {x, 1.0f}, wallTex, {2.0f, 2.0f}));
-    }
-    for (float y=3.0f; y<30.0f; y+=2.0f)
-    {  
-        walls.push_back(sprites.createSprite(ForegroundLayer, {1.0f, y}, wallTex, {2.0f, 2.0f}));
-        walls.push_back(sprites.createSprite(ForegroundLayer, {29.0f, y}, wallTex, {2.0f, 2.0f}));
-    }
+    staticImages.push_back(sprites.createSprite(BackgroundLayer, LogicalSize*0.5f, bg, BackgroundSize));
+    staticImages.push_back(sprites.createSprite(GameLayer, {1,15}, sprites.getOrCreateTexture("frame_left", "textures/frame_left.png"), {2,30}));
+    staticImages.push_back(sprites.createSprite(GameLayer, {15,1}, sprites.getOrCreateTexture("frame_top", "textures/frame_top.png"), {26,2}));
+    staticImages.push_back(sprites.createSprite(GameLayer, {29,15}, sprites.getOrCreateTexture("frame_right", "textures/frame_right.png"), {2,30}));
 
     auto defaultPaddle = sprites.getOrCreateTexture("paddle","textures/paddle.png");
     player=sprites.createSprite(
