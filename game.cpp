@@ -17,11 +17,11 @@ Game::Game(const filesystem::path& levels) :
     fieldTL(FieldPosition),
     fieldBR(FieldPosition+FieldSize),
     sprites(3, 1024, 16),
-    trail(ceil(TrailEmitsPerSecond*TrailDuration)+1, "textures/circle.png"),
+    trail(ceil(TrailEmitsPerSecond*TrailDuration)+1, "textures/trail.png"),
     brickParts(128,  "textures/fragment.png"),
     score(0),
     nextTrailEmit(0.0f),
-    font("textures/exan3.ttf")
+    font("textures/font.ttf")
 {
     for (auto const& dir_entry : std::filesystem::directory_iterator{levels})
     {
@@ -49,7 +49,7 @@ Game::Game(const filesystem::path& levels) :
     ball.sprite = sprites.createSprite(
         GameLayer,
         {}, // position is reset when level starts
-        sprites.getOrCreateTexture("ball", "textures/awesomeface.png"),
+        sprites.getOrCreateTexture("ball", "textures/ball.png"),
         { ball.radius*2.2f, ball.radius*2.2f }
     );
 

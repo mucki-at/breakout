@@ -1,6 +1,7 @@
 .vscode/
 build/
 shaders/
+textures/
 .DS_Store
 *.*~
 *.kra-autosave.kra
